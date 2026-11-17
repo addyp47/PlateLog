@@ -2,6 +2,12 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.4] - 2026-11-17
+
+### Fixed
+- **Service Worker Asset Sync (`public/sw.js`):** Serve `/adapter.js` network-first alongside `/index.html` and `/config.js` so PWA updates never mix new HTML with an older cached adapter module.
+- **Backup Import Guard & Object Profile Formatting (`public/index.html`):** Throw a clear refresh prompt if `window.platelog.importBackup` isn't loaded yet instead of silently reporting `0` imported documents, and format object-shaped `settings.profile` records (`height_in`, `start_weight_lb`, `start_date`) cleanly instead of rendering `[object Object]`.
+
 ## [0.2.3] - 2026-11-17
 
 ### Changed

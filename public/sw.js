@@ -1,4 +1,4 @@
-const CACHE_NAME = "platelog-shell-v0.2.3";
+const CACHE_NAME = "platelog-shell-v0.2.4";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
@@ -38,8 +38,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for HTML & config.js so updates and config changes propagate quickly, falling back to cache offline.
-  if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/config.js") {
+  // Network-first for HTML, adapter.js, and config.js so UI and backend bindings never drift across deploys.
+  if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/adapter.js" || url.pathname === "/config.js") {
     event.respondWith(networkFirst(req));
     return;
   }

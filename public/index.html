@@ -514,7 +514,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.3</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.4</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -665,6 +665,20 @@ import "./adapter.js";
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
+  function formatProfile(profile, doc) {
+    if (typeof profile === "string") return profile.trim() || DEFAULT_PROFILE;
+    if (profile && typeof profile === "object") {
+      const parts = [];
+      if (+profile.height_in > 0) parts.push(`${Math.floor(+profile.height_in / 12)}'${Math.round(+profile.height_in % 12)}"`);
+      if (+profile.start_weight_lb > 0) {
+        parts.push(`start weight ${profile.start_weight_lb} lb${profile.start_date ? ` (${profile.start_date})` : ""}`);
+      }
+      if (doc?.program?.structure) parts.push(doc.program.structure);
+      if (doc?.plan?.note) parts.push(doc.plan.note);
+      if (parts.length) return parts.join("; ");
+    }
+    return DEFAULT_PROFILE;
+  }
   let settings = clone(DEFAULTS);
   let days = {};
   let coachNotes = [];
@@ -1315,7 +1329,7 @@ Identify the reference object, then estimate the dish's diameter across the top,
     renderMyFoods(); renderCombos(); renderDishes();
     const tg = settings.targets;
     $("tKcal").value = tg.kcal; $("tProt").value = tg.protein; $("tFib").value = tg.fiber; $("tGoal").value = tg.goal || "lean";
-    $("tProfile").value = settings.profile || DEFAULT_PROFILE;
+    $("tProfile").value = formatProfile(settings.profile);
     const theme = (() => { try { return localStorage.getItem("platelog.theme") || "auto"; } catch { return "auto"; } })();
     $("themeSelect").value = theme;
     $("accountEmail").textContent = window.platelog?.getUserEmail?.() || "—";
@@ -1337,6 +1351,9 @@ Identify the reference object, then estimate the dish's diameter across the top,
     const statusEl = $("backupStatus");
     const btn = $("importBackupBtn");
     try {
+      if (typeof window.platelog?.importBackup !== "function") {
+        throw new Error("App update still loading — force-close or hard-refresh once, then try importing again.");
+      }
       const parsed = JSON.parse(await file.text());
       const daysCount = Array.isArray(parsed?.days) ? parsed.days.length : Object.keys(parsed?.days || {}).length;
       const foodsCount = Array.isArray(parsed?.foods) ? parsed.foods.length : Object.keys(parsed?.foods || {}).length;
@@ -1344,7 +1361,7 @@ Identify the reference object, then estimate the dish's diameter across the top,
       btn.disabled = true;
       btn.textContent = "Importing…";
       statusEl.textContent = "Uploading backup to Supabase…";
-      const res = await window.platelog?.importBackup?.(parsed);
+      const res = await window.platelog.importBackup(parsed);
       statusEl.textContent = `Imported ${res?.total || 0} documents (${res?.counts?.days || 0} days, ${res?.counts?.foods || 0} foods, ${res?.counts?.combos || 0} combos).`;
       toast(`Imported ${res?.counts?.days || 0} days from backup.`);
       render();
@@ -1361,7 +1378,10 @@ Identify the reference object, then estimate the dish's diameter across the top,
     btn.disabled = true;
     btn.textContent = "Exporting…";
     try {
-      const data = await window.platelog?.exportBackup?.();
+      if (typeof window.platelog?.exportBackup !== "function") {
+        throw new Error("App update still loading — force-close or hard-refresh once, then try exporting again.");
+      }
+      const data = await window.platelog.exportBackup();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1380,9 +1400,13 @@ Identify the reference object, then estimate the dish's diameter across the top,
     }
   };
   $("loadAllHistoryBtn").onclick = async () => {
+    if (typeof window.platelog?.loadAllDays !== "function") {
+      toast("App update still loading — refresh once and try again.");
+      return;
+    }
     $("loadAllHistoryBtn").disabled = true;
     $("loadAllHistoryBtn").textContent = "Loading full history…";
-    await window.platelog?.loadAllDays?.();
+    await window.platelog.loadAllDays();
     toast("Loaded full day history.");
     $("loadAllHistoryBtn").textContent = "Full history loaded";
   };
@@ -1890,7 +1914,7 @@ If no food is visible, set error="no food".`;
       }
     }
     const prompt = `You are a concise, evidence-based strength and nutrition coach.
-Athlete profile: ${settings.profile || DEFAULT_PROFILE}
+Athlete profile: ${formatProfile(settings.profile)}
 Goal: get leaner, stronger and build muscle. Current phase: ${GOALS[tg.goal]?.label}.
 Targets: ${tg.kcal} kcal, ${tg.protein} g protein, ${tg.fiber} g fiber.
 Computed: trend weight ${lastTr ? r1(lastTr.t).toFixed(1) + " lb" : "n/a"}; 21-day rate ${r ? r.rate.toFixed(2) + " lb/wk" : "not enough data"}; estimated maintenance ${m ?? "not enough data"} kcal.
@@ -1962,7 +1986,7 @@ Give a short weekly check-in: 1) what the data shows, 2) up to 4 specific change
         const d = s.data();
         settings = {
           targets: { ...DEFAULTS.targets, ...(d.targets || {}) },
-          profile: d.profile || DEFAULT_PROFILE,
+          profile: formatProfile(d.profile, d),
           exercises: (d.exercises && d.exercises.length) ? clone(d.exercises) : clone(DEFAULTS.exercises),
           dishes: Array.isArray(d.dishes) ? clone(d.dishes) : []
         };
