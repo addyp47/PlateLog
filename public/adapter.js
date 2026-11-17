@@ -432,6 +432,115 @@ export async function loadAllDays() {
   notify("col:days");
 }
 
+function bodyOf(item) {
+  if (item == null || typeof item !== "object" || Array.isArray(item)) return {};
+  const keys = Object.keys(item);
+  const wrapper = item.data && typeof item.data === "object" && !Array.isArray(item.data)
+    && keys.every((key) => key === "id" || key === "data" || key === "path" || key === "exists");
+  return wrapper ? { ...item.data } : { ...item };
+}
+
+export function parseBackupDocs(root) {
+  if (!root || typeof root !== "object" || Array.isArray(root)) {
+    throw new Error("Backup file must be a JSON object.");
+  }
+  const docs = [];
+  if (root.settings && typeof root.settings === "object" && !Array.isArray(root.settings)) {
+    const rawSettings = root.settings;
+    const settingsObj = rawSettings.main && typeof rawSettings.main === "object" && !Array.isArray(rawSettings.main)
+      ? rawSettings
+      : ["units", "unit", "kcal", "targets", "protein", "fiber"].some((k) => k in rawSettings)
+      ? { main: rawSettings }
+      : rawSettings;
+    for (const [doc_id, item] of Object.entries(settingsObj)) {
+      docs.push({ collection: "settings", doc_id, data: bodyOf(item) });
+    }
+  }
+  for (const col of ["days", "foods", "combos", "checkins", "coach_notes"]) {
+    const value = root[col];
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        const doc_id = String(item?.id || item?.date || index);
+        if (col === "days" && !/^\d{4}-\d{2}-\d{2}$/.test(doc_id)) {
+          throw new Error(`Day id "${doc_id}" is not YYYY-MM-DD.`);
+        }
+        docs.push({ collection: col, doc_id, data: bodyOf(item) });
+      });
+    } else if (typeof value === "object") {
+      for (const [doc_id, item] of Object.entries(value)) {
+        if (col === "days" && !/^\d{4}-\d{2}-\d{2}$/.test(doc_id)) {
+          throw new Error(`Day id "${doc_id}" is not YYYY-MM-DD.`);
+        }
+        docs.push({ collection: col, doc_id, data: bodyOf(item) });
+      }
+    } else {
+      throw new Error(`${col} must be an object or array.`);
+    }
+  }
+  if (!docs.length) throw new Error("Backup file has no documents to import.");
+  return docs;
+}
+
+export async function importBackup(root, { replace = false } = {}) {
+  const user = await requireUser();
+  const docs = parseBackupDocs(root);
+  if (replace) {
+    const { error } = await supabase.from("docs").delete().eq("user_id", user.id);
+    if (error) throw error;
+    for (const col of COLLECTIONS) writeCache(user.id, col, []);
+  }
+  const rows = docs.map((d) => ({
+    user_id: user.id,
+    collection: d.collection,
+    doc_id: d.doc_id,
+    data: d.data,
+  }));
+  for (let i = 0; i < rows.length; i += 200) {
+    const chunk = rows.slice(i, i + 200);
+    const { error } = await supabase.from("docs").upsert(chunk, { onConflict: "user_id,collection,doc_id" });
+    if (error) throw error;
+  }
+  writeQueue(user.id, []);
+  const cutoff = dateCutoff(DEFAULT_DAYS_WINDOW);
+  if (docs.some((d) => d.collection === "days" && d.doc_id < cutoff)) {
+    loadFullDaysHistory = true;
+  }
+  const counts = Object.fromEntries([...COLLECTIONS].map((c) => [c, 0]));
+  for (const d of docs) {
+    counts[d.collection] = (counts[d.collection] || 0) + 1;
+    markLocalWrite(d.collection, d.doc_id);
+  }
+  notify("doc:settings/main");
+  for (const col of COLLECTIONS) notify(`col:${col}`);
+  return { total: docs.length, counts };
+}
+
+export async function exportBackup() {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("docs")
+    .select("collection,doc_id,data")
+    .eq("user_id", user.id)
+    .order("doc_id");
+  if (error) throw error;
+  const out = {
+    exported: new Date().toISOString(),
+    source: "platelog-pwa",
+    settings: {},
+    days: {},
+    foods: {},
+    combos: {},
+    checkins: {},
+    coach_notes: {},
+  };
+  for (const row of data || []) {
+    if (!out[row.collection]) out[row.collection] = {};
+    out[row.collection][row.doc_id] = row.data || {};
+  }
+  return out;
+}
+
 async function callSample(prompt, opts, asJson) {
   await authReady;
   const images = [];
@@ -802,6 +911,8 @@ const api = {
   getUserEmail,
   onSyncStatus,
   loadAllDays,
+  importBackup,
+  exportBackup,
 };
 
 window.platelog = api;

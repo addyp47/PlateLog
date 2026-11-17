@@ -2,6 +2,14 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.2] - 2026-11-17
+
+### Added
+- **In-App Backup Import & Export:** Added **Import backup JSON** and **Export JSON** buttons under **Targets → Account & App** (`public/index.html` + `public/adapter.js`) so you can restore a Plate Log backup directly from your browser or iPhone without needing a service-role key or CLI.
+
+### Fixed
+- **CLI Import (`scripts/import.mjs`):** Avoid sending `sb_secret_` keys in the `Authorization: Bearer` header so 2026 secret keys work seamlessly alongside legacy `service_role` JWTs.
+
 ## [0.2.1] - 2026-11-17
 
 ### Changed

@@ -514,7 +514,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.1</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.2</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -525,10 +525,14 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
         </label>
         <div class="field">Signed in as<div class="small" id="accountEmail" style="padding:8px 0">—</div></div>
       </div>
-      <div class="row">
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn ghost sm" id="importBackupBtn" type="button">Import backup JSON</button>
+        <input id="importBackupFile" type="file" accept=".json,application/json" hidden>
+        <button class="btn ghost sm" id="exportBackupBtn" type="button">Export JSON</button>
         <button class="btn ghost sm" id="loadAllHistoryBtn" type="button">Load full history (&gt;150 days)</button>
         <button class="btn ghost sm" id="signOutBtn" type="button">Sign out</button>
       </div>
+      <div class="small muted" id="backupStatus"></div>
     </div>
   </section>
 </main>
@@ -1325,6 +1329,56 @@ Identify the reference object, then estimate the dish's diameter across the top,
     } catch {}
   };
   $("signOutBtn").onclick = () => window.platelog?.signOut?.();
+  $("importBackupBtn").onclick = () => $("importBackupFile").click();
+  $("importBackupFile").onchange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const statusEl = $("backupStatus");
+    const btn = $("importBackupBtn");
+    try {
+      const parsed = JSON.parse(await file.text());
+      const daysCount = Array.isArray(parsed?.days) ? parsed.days.length : Object.keys(parsed?.days || {}).length;
+      const foodsCount = Array.isArray(parsed?.foods) ? parsed.foods.length : Object.keys(parsed?.foods || {}).length;
+      if (!confirm(`Import ${file.name} (${daysCount} days, ${foodsCount} foods)? Matching dates and settings will be updated.`)) return;
+      btn.disabled = true;
+      btn.textContent = "Importing…";
+      statusEl.textContent = "Uploading backup to Supabase…";
+      const res = await window.platelog?.importBackup?.(parsed);
+      statusEl.textContent = `Imported ${res?.total || 0} documents (${res?.counts?.days || 0} days, ${res?.counts?.foods || 0} foods, ${res?.counts?.combos || 0} combos).`;
+      toast(`Imported ${res?.counts?.days || 0} days from backup.`);
+      render();
+    } catch (err) {
+      statusEl.textContent = err?.message || "Could not import that JSON file.";
+      toast(statusEl.textContent);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Import backup JSON";
+    }
+  };
+  $("exportBackupBtn").onclick = async () => {
+    const btn = $("exportBackupBtn");
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+    try {
+      const data = await window.platelog?.exportBackup?.();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `platelog-backup-${todayStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("Downloaded backup JSON.");
+    } catch (err) {
+      toast(err?.message || "Export failed.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Export JSON";
+    }
+  };
   $("loadAllHistoryBtn").onclick = async () => {
     $("loadAllHistoryBtn").disabled = true;
     $("loadAllHistoryBtn").textContent = "Loading full history…";

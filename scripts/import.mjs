@@ -146,9 +146,11 @@ function rest(env, method, path, body, extra) {
 async function request(env, method, path, body, isAuth, extra = {}) {
   const headers = {
     apikey: env.key,
-    Authorization: `Bearer ${env.key}`,
     ...extra,
   };
+  if (!env.key.startsWith("sb_secret_")) {
+    headers.Authorization = `Bearer ${env.key}`;
+  }
   if (body != null) headers["Content-Type"] = "application/json";
   const res = await fetch(`${env.url}${path}`, {
     method,
