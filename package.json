@@ -1,0 +1,11 @@
+{
+  "name": "platelog",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs",
+    "start": "python3 -m http.server 43123 -d public",
+    "import": "node scripts/import.mjs"
+  }
+}

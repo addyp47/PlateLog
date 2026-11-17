@@ -1,0 +1,10 @@
+node_modules/
+private/
+*.platelog.json
+.DS_Store
+
+# Personal artifact exports. Never commit these.
+/workspace/uploads/
+uploads/
+*-export.json
+export.json

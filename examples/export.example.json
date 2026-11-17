@@ -1,0 +1,37 @@
+{
+  "exported": "2026-11-17T00:00:00.000Z",
+  "source": "platelog-artifact",
+  "settings": {
+    "main": {
+      "targets": { "kcal": 2700, "protein": 150, "fiber": 35, "goal": "cut" },
+      "exercises": [],
+      "dishes": [{ "n": "Dinner plate", "in": 10.5 }],
+      "plan": null,
+      "profile": null,
+      "program": null
+    }
+  },
+  "days": {
+    "2026-11-01": { "date": "2026-11-01", "weight": 180, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-02": { "date": "2026-11-02", "weight": 179.9, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": 2400 },
+    "2026-11-03": { "date": "2026-11-03", "weight": 179.8, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-04": { "date": "2026-11-04", "weight": 179.7, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-05": { "date": "2026-11-05", "weight": 179.6, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-06": { "date": "2026-11-06", "weight": 179.5, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-07": { "date": "2026-11-07", "weight": 179.4, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-08": { "date": "2026-11-08", "weight": 179.3, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-09": { "date": "2026-11-09", "weight": 179.2, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-10": { "date": "2026-11-10", "weight": 179.1, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-11": { "date": "2026-11-11", "weight": 179.0, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-12": { "date": "2026-11-12", "weight": 178.9, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-13": { "date": "2026-11-13", "weight": 178.8, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": null },
+    "2026-11-14": { "date": "2026-11-14", "weight": 178.7, "complete": true, "foods": [{ "n": "Oats", "kcal": 2000, "p": 140, "f": 30 }], "lifts": {}, "energy_out": 2600 }
+  },
+  "foods": {
+    "chicken": { "n": "Chicken breast, cooked", "kcal": 165, "p": 31, "f": 0, "note": "", "u": "g" }
+  },
+  "combos": {
+    "breakfast": { "n": "Breakfast", "items": [{ "n": "Oats", "kcal": 300, "p": 10, "f": 6 }] }
+  },
+  "checkins": {}
+}

@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run unit and release checks
+        run: npm test
+      - name: Syntax check client adapter and service worker
+        run: |
+          node --check public/adapter.js
+          node --check public/sw.js
+          node --check public/config.example.js

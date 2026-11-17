@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
+
+## [0.2.0] - 2026-11-17
+
+### Added
+- **PWA & Offline Support:** Added `public/manifest.webmanifest`, PNG app icons (`192`, `512`, `apple-touch-icon`), and `public/sw.js` service worker, plus local snapshot caching and an offline write queue in `public/adapter.js`.
+- **iOS-Friendly Auth:** Added in-app 6-digit Email OTP verification alongside password sign-in so Safari Home Screen PWAs never hit cross-browser PKCE redirect failures.
+- **Mobile UI Overhaul (`public/index.html`):**
+  - Bottom tab bar on mobile (`<= 640px`) for thumb-friendly navigation.
+  - Unified food entry composer with separate Camera (`capture="environment"`), Photos, and Barcode Scanner (`BarcodeDetector` + Open Food Facts lookup) controls.
+  - Tap-to-edit logged foods (macros, quick scale `0.5×`/`1.5×`/`2×`, duplicate) and one-tap **Copy yesterday**.
+  - **"Finish yesterday"** reminder banner when yesterday has food logged without being marked complete.
+  - Interactive touch-scrubbing weight and calorie charts.
+  - Adaptive TDEE target suggestion card with one-tap **Apply to Targets**.
+  - Editable Coach Profile in Targets, optional body-photo attachment on Coach Check-in, and persisted `coach_notes` history.
+  - Account & App card in Targets with theme selector (`Auto / Light / Dark`), full-history loader, version badge, and sign out.
+- **Backend & iOS Shortcuts API:**
+  - Migration `20261117000001_atomic_and_coach.sql` adding `coach_notes` collection, rolling day index, and atomic `append_day_food` / `patch_day_fields` RPCs.
+  - New `POST /functions/v1/api/log` endpoint (Gemini estimation + atomic save + remaining macros) and `GET /functions/v1/api/foods` for Apple Shortcuts.
+  - Shared Gemini client (`_shared/gemini.ts`) with structured JSON `responseSchema` support.
+- **Release & CI/CD Workflows:** Added `.github/workflows/ci.yml`, `deploy.yml`, and `release.yml`.
+
+### Security & Fixes
+- Disabled open signups by default (`supabase/config.toml` and `adapter.js` UI).
+- Added optional `ALLOWED_USER_IDS` / `ALLOWED_EMAILS`, `ALLOWED_ORIGINS` CORS restriction, and per-minute rate limiting in `sample/index.ts`.
+- Compressed and converted monthly check-in photos (`assets.upload`) to JPEG so iPhone HEIC files render everywhere and stay compact.
+- Scoped Realtime updates and suppressed local-write echo reloads in `public/adapter.js`.
+
+## [0.1.0] - 2026-11-17
+- Initial Supabase + Netlify port from Plate Log Version 10 artifact.
