@@ -8,7 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="PlateLog">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#1F4FBF">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" id="metaThemeColor" content="#FFFFFF">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
@@ -16,6 +17,9 @@
 try {
   const t = localStorage.getItem("platelog.theme");
   if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const mc = document.getElementById("metaThemeColor");
+  if (mc) mc.content = dark ? "#171B22" : "#FFFFFF";
 } catch {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,6 +28,8 @@ try {
 <style>
 /* Layout: one narrow logbook column, sticky header, mobile bottom tab bar, cards where actions live. */
 :root {
+  color-scheme: light;
+  accent-color: var(--accent);
   --bg: #F3F5F8;
   --surface: #FFFFFF;
   --sunk: #E8ECF2;
@@ -48,14 +54,14 @@ try {
   --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-green: #55BC7F;
   --good: #55BC7F; --warn: #E5B53E; --bad: #EE6670;
   --good-bg: #16301F; --warn-bg: #33290F; --bad-bg: #3A1A1D; --info-bg: #1A2640;
-  color-scheme: dark; } }
+  color-scheme: dark; accent-color: var(--accent); } }
 :root[data-theme="dark"] {
   --bg: #0F1217; --surface: #171B22; --sunk: #1F242D; --line: #2C333F; --fg: #E8ECF2; --muted: #9AA4B4;
   --accent: #6E95F0; --accent-fg: #0F1217;
   --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-green: #55BC7F;
   --good: #55BC7F; --warn: #E5B53E; --bad: #EE6670;
   --good-bg: #16301F; --warn-bg: #33290F; --bad-bg: #3A1A1D; --info-bg: #1A2640;
-  color-scheme: dark; }
+  color-scheme: dark; accent-color: var(--accent); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
@@ -252,14 +258,23 @@ td.num, th.num { text-align: right; }
 /* barcode modal */
 .modal { position: fixed; inset: 0; z-index: 50; background: rgba(10, 12, 16, .72); display: grid; place-items: center; padding: 16px; }
 .modal .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; width: min(460px, 100%); padding: 16px; display: grid; gap: 12px; }
-.modal video { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; background: #000; }
+.scanbox { position: relative; border-radius: 8px; overflow: hidden; background: #000; }
+.scanbox::after { content: ""; position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; background: var(--plate-red); box-shadow: 0 0 8px rgba(238, 102, 112, .7); pointer-events: none; }
+.modal video { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; border-radius: 8px; background: #000; }
+.themebtn { background: var(--sunk); color: var(--fg); border: 1px solid var(--line); border-radius: 999px; font-size: 12px; padding: 3px 9px; cursor: pointer; line-height: 1.4; white-space: nowrap; }
 code.blk { display: block; font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre; }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="wrap">
-    <div class="brand"><h1>Plate Log</h1><span class="sub" id="syncNote">Loading…</span></div>
+    <div class="brand">
+      <h1>Plate Log</h1>
+      <div class="row" style="gap:8px">
+        <button class="themebtn" id="themeBtn" type="button" title="Theme (follows system by default)">Auto</button>
+        <span class="sub" id="syncNote">Loading…</span>
+      </div>
+    </div>
     <nav class="tabs" role="tablist">
       <button role="tab" id="tab-today" data-view="today" aria-selected="true">Today</button>
       <button role="tab" id="tab-progress" data-view="progress" aria-selected="false">Progress</button>
@@ -514,7 +529,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.4</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.5</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -540,12 +555,19 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
 <div class="modal" id="scanModal" hidden>
   <div class="panel">
     <div class="row spread"><h2>Scan Barcode</h2><button class="iconbtn" type="button" id="scanClose" aria-label="Close scanner">×</button></div>
-    <video id="scanVideo" playsinline muted hidden></video>
-    <p class="small muted" id="scanStatus" style="margin:0">Point camera at a UPC/EAN barcode, or enter the digits below.</p>
+    <div class="scanbox" id="scanBox" hidden><video id="scanVideo" autoplay playsinline muted></video></div>
+    <p class="small muted" id="scanStatus" style="margin:0">Starting camera…</p>
     <div class="row">
-      <input id="scanCodeInput" type="text" inputmode="numeric" placeholder="e.g. 0041196010121" style="flex:1">
-      <button class="btn" type="button" id="scanLookupBtn">Look up</button>
+      <label class="btn ghost sm" for="scanPhotoFile">📷 Scan from photo</label>
+      <input id="scanPhotoFile" type="file" accept="image/*" capture="environment" class="visually-hidden">
     </div>
+    <details id="scanManualWrap">
+      <summary class="small muted" style="cursor:pointer">Or enter barcode digits manually</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="scanCodeInput" type="text" inputmode="numeric" placeholder="e.g. 0041196010121" style="flex:1">
+        <button class="btn" type="button" id="scanLookupBtn">Look up</button>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -995,49 +1017,133 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
   }
 
   // ---------- Barcode scanner + Open Food Facts ----------
-  let scanStream = null, scanTimer = null;
+  let scanStream = null, scanTimer = null, scanCanvas = null, scanModPromise = null;
+  let lastScanCode = "", lastScanAt = 0;
+  function getBarcodeDecoder() {
+    if (!scanModPromise) scanModPromise = import("./vendor/barcode.mjs");
+    return scanModPromise;
+  }
+  async function nativeBarcodeDetector() {
+    if (!("BarcodeDetector" in window)) return null;
+    try {
+      const wanted = ["ean_13", "upc_a", "upc_e", "ean_8", "code_128"];
+      const supported = typeof BarcodeDetector.getSupportedFormats === "function"
+        ? await BarcodeDetector.getSupportedFormats()
+        : wanted;
+      const formats = wanted.filter(f => supported.includes(f));
+      return formats.length ? new BarcodeDetector({ formats }) : null;
+    } catch { return null; }
+  }
+  async function decodeFromVisual(src, sw, sh, detector) {
+    if (detector) {
+      try {
+        const codes = await detector.detect(src);
+        if (codes.length && codes[0].rawValue) return codes[0].rawValue;
+      } catch {}
+    }
+    if (!sw || !sh) return null;
+    const scale = Math.min(1, 720 / Math.max(sw, sh));
+    const cw = Math.max(1, Math.round(sw * scale));
+    const ch = Math.max(1, Math.round(sh * scale));
+    if (!scanCanvas) scanCanvas = document.createElement("canvas");
+    scanCanvas.width = cw;
+    scanCanvas.height = ch;
+    const ctx = scanCanvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(src, 0, 0, cw, ch);
+    const img = ctx.getImageData(0, 0, cw, ch);
+    const { decodeRgba } = await getBarcodeDecoder();
+    return decodeRgba(img.data, cw, ch, true);
+  }
   function stopScanner() {
     clearTimeout(scanTimer);
     if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    const video = $("scanVideo");
+    if (video) video.srcObject = null;
+    $("scanBox").hidden = true;
     $("scanModal").hidden = true;
   }
   $("scanClose").onclick = stopScanner;
+  $("scanModal").addEventListener("click", e => { if (e.target === $("scanModal")) stopScanner(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("scanModal").hidden) stopScanner(); });
   $("scanOpen").onclick = async () => {
     $("scanModal").hidden = false;
+    $("scanBox").hidden = true;
     $("scanCodeInput").value = "";
+    $("scanManualWrap").open = false;
+    lastScanCode = "";
+    lastScanAt = 0;
     const video = $("scanVideo");
-    if (!("BarcodeDetector" in window)) {
-      video.hidden = true;
-      $("scanStatus").textContent = "Live camera barcode scanning isn't supported in this browser—type or paste the barcode digits below (or use Camera + Nutrition Label mode).";
-      $("scanCodeInput").focus();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      $("scanStatus").textContent = "Live camera preview is unavailable here—tap Scan from photo below.";
       return;
     }
+    $("scanStatus").textContent = "Starting camera…";
     try {
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      video.srcObject = scanStream;
-      video.hidden = false;
+      const [stream, detector] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        }),
+        nativeBarcodeDetector(),
+      ]);
+      if ($("scanModal").hidden) { stream.getTracks().forEach(t => t.stop()); return; }
+      scanStream = stream;
+      video.srcObject = stream;
+      $("scanBox").hidden = false;
       await video.play();
+      if (!detector) getBarcodeDecoder().catch(() => {});
       $("scanStatus").textContent = "Point camera at the barcode…";
-      const detector = new BarcodeDetector({ formats: ["ean_13", "upc_a", "upc_e", "ean_8"] });
       const tick = async () => {
         if ($("scanModal").hidden || !scanStream) return;
-        try {
-          const codes = await detector.detect(video);
-          if (codes.length && codes[0].rawValue) {
-            const code = codes[0].rawValue;
-            $("scanCodeInput").value = code;
-            await lookupBarcode(code);
-            return;
-          }
-        } catch {}
-        scanTimer = setTimeout(tick, 350);
+        if (video.readyState >= 2 && video.videoWidth > 0) {
+          try {
+            const code = await decodeFromVisual(video, video.videoWidth, video.videoHeight, detector);
+            const now = Date.now();
+            if (code && (code !== lastScanCode || now - lastScanAt > 4000)) {
+              lastScanCode = code;
+              lastScanAt = now;
+              navigator.vibrate?.(40);
+              $("scanCodeInput").value = code;
+              await lookupBarcode(code);
+              if ($("scanModal").hidden || !scanStream) return;
+            }
+          } catch {}
+        }
+        scanTimer = setTimeout(tick, 220);
       };
       tick();
     } catch {
-      video.hidden = true;
-      $("scanStatus").textContent = "Camera access unavailable. Enter barcode digits below.";
+      $("scanBox").hidden = true;
+      $("scanStatus").textContent = "Camera permission blocked or unavailable—tap Scan from photo below.";
     }
   };
+  $("scanPhotoFile").addEventListener("change", async e => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    $("scanStatus").textContent = "Reading barcode from photo…";
+    try {
+      const bmp = await createImageBitmap(file).catch(() => new Promise((resolve, reject) => {
+        const u = URL.createObjectURL(file);
+        const im = new Image();
+        im.onload = () => { URL.revokeObjectURL(u); resolve(im); };
+        im.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode")); };
+        im.src = u;
+      }));
+      const detector = await nativeBarcodeDetector();
+      const code = await decodeFromVisual(bmp, bmp.width, bmp.height, detector);
+      bmp.close?.();
+      if (!code) {
+        $("scanStatus").textContent = "Couldn't spot a crisp barcode in that photo. Hold closer with good light, or use Nutrition label photo mode.";
+        return;
+      }
+      $("scanCodeInput").value = code;
+      await lookupBarcode(code);
+    } catch {
+      $("scanStatus").textContent = "Couldn't read that photo. Try again with the barcode centered.";
+    }
+  });
   $("scanLookupBtn").onclick = () => {
     const code = $("scanCodeInput").value.trim().replace(/\s+/g, "");
     if (code) lookupBarcode(code);
@@ -1325,23 +1431,51 @@ Identify the reference object, then estimate the dish's diameter across the top,
     } catch (err) { $("dishNote").textContent = friendlyAiError(err); }
   });
 
+  const themeMedia = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function getThemePref() {
+    try {
+      const v = localStorage.getItem("platelog.theme");
+      return v === "light" || v === "dark" ? v : "auto";
+    } catch { return "auto"; }
+  }
+  function applyTheme(v, { persist = true } = {}) {
+    const pref = v === "light" || v === "dark" ? v : "auto";
+    if (persist) {
+      try {
+        if (pref === "auto") localStorage.removeItem("platelog.theme");
+        else localStorage.setItem("platelog.theme", pref);
+      } catch {}
+    }
+    if (pref === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = pref;
+    const isDark = pref === "dark" || (pref === "auto" && !!themeMedia?.matches);
+    const mc = $("metaThemeColor");
+    if (mc) mc.content = isDark ? "#171B22" : "#FFFFFF";
+    const sel = $("themeSelect");
+    if (sel) sel.value = pref;
+    const btn = $("themeBtn");
+    if (btn) {
+      btn.textContent = pref === "dark" ? "☾ Dark" : pref === "light" ? "☀ Light" : "◐ Auto";
+      btn.title = pref === "auto" ? `Theme: System (${isDark ? "Dark" : "Light"})` : `Theme: ${pref}`;
+    }
+  }
+  themeMedia?.addEventListener?.("change", () => { if (getThemePref() === "auto") applyTheme("auto", { persist: false }); });
+  $("themeBtn").onclick = () => {
+    const cur = getThemePref();
+    applyTheme(cur === "auto" ? "dark" : cur === "dark" ? "light" : "auto");
+  };
+  applyTheme(getThemePref(), { persist: false });
+
   function renderSettings() {
     renderMyFoods(); renderCombos(); renderDishes();
     const tg = settings.targets;
     $("tKcal").value = tg.kcal; $("tProt").value = tg.protein; $("tFib").value = tg.fiber; $("tGoal").value = tg.goal || "lean";
     $("tProfile").value = formatProfile(settings.profile);
-    const theme = (() => { try { return localStorage.getItem("platelog.theme") || "auto"; } catch { return "auto"; } })();
-    $("themeSelect").value = theme;
+    applyTheme(getThemePref(), { persist: false });
     $("accountEmail").textContent = window.platelog?.getUserEmail?.() || "—";
   }
 
-  $("themeSelect").onchange = () => {
-    const v = $("themeSelect").value;
-    try {
-      if (v === "auto") { localStorage.removeItem("platelog.theme"); delete document.documentElement.dataset.theme; }
-      else { localStorage.setItem("platelog.theme", v); document.documentElement.dataset.theme = v; }
-    } catch {}
-  };
+  $("themeSelect").onchange = () => applyTheme($("themeSelect").value);
   $("signOutBtn").onclick = () => window.platelog?.signOut?.();
   $("importBackupBtn").onclick = () => $("importBackupFile").click();
   $("importBackupFile").onchange = async (e) => {

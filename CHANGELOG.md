@@ -2,6 +2,14 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.5] - 2026-11-17
+
+### Added
+- **Universal Camera Barcode Scanner (`public/vendor/barcode.mjs` + `public/index.html`):** Added a pure-JS ZXing 1D barcode decoder fallback (UPC-A, UPC-E, EAN-13, EAN-8, Code 128, horizontal & vertical) so live camera scanning works on iOS Safari, Home Screen PWAs, and browsers without `BarcodeDetector`, plus a **Scan from photo** camera fallback and collapsed manual digit entry.
+
+### Improved
+- **Dark Mode & System Preference Sync (`public/index.html`):** Default cleanly to system appearance (`auto`), sync `<meta name="theme-color">` and native `color-scheme` / `accent-color` across light/dark transitions, and add a quick **Auto / Dark / Light** pill toggle in the header alongside **Targets → Account & App**.
+
 ## [0.2.4] - 2026-11-17
 
 ### Fixed

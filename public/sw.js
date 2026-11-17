@@ -1,4 +1,4 @@
-const CACHE_NAME = "platelog-shell-v0.2.4";
+const CACHE_NAME = "platelog-shell-v0.2.5";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
@@ -6,6 +6,7 @@ const SHELL_ASSETS = [
   "/config.js",
   "/manifest.webmanifest",
   "/vendor/supabase.mjs",
+  "/vendor/barcode.mjs",
   "/apple-touch-icon.png",
   "/icon-192.png",
   "/icon-512.png",
