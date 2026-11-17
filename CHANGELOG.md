@@ -2,6 +2,11 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.3] - 2026-11-17
+
+### Changed
+- **Password-First Sign-In (`public/adapter.js`):** Made Email + Password the primary sign-in form (supports iOS Face ID / Keychain autofill and avoids Supabase's 2/hr built-in email limit), with the 6-digit email code flow tucked below as a secondary option and a clearer rate-limit message.
+
 ## [0.2.2] - 2026-11-17
 
 ### Added

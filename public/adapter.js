@@ -755,31 +755,46 @@ function showAuth(message) {
         #platelog-auth h2 { margin: 0; }
         #platelog-auth .err { color: var(--bad, #c33440); margin: 0; }
       </style>
-      <form class="card" id="platelog-auth-form">
-        <h2>Sign in</h2>
-        <p class="small muted" style="margin:0">Plate Log keeps one private log. Enter your email to get a 6-digit code (works inside iPhone Home Screen apps without redirect issues).</p>
-        <label class="field">Email<input id="platelog-email" type="email" autocomplete="username" required></label>
-        <button class="btn" type="submit" id="platelog-magic">Send sign-in code</button>
-        <div id="platelog-otp-wrap" hidden style="display:grid;gap:8px;padding-top:4px;border-top:1px solid var(--line, #d5dbe4)">
-          <label class="field">6-digit code from email<input id="platelog-otp" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="123456"></label>
-          <button class="btn" type="button" id="platelog-otp-btn">Verify code</button>
-        </div>
-        <details>
-          <summary class="small muted">Or sign in with password</summary>
-          <label class="field" style="margin-top:8px">Password<input id="platelog-password" type="password" autocomplete="current-password"></label>
-          <div class="row" style="margin-top:8px">
-            <button class="btn ghost" type="button" id="platelog-password-btn">Sign in with password</button>
+      <div class="card">
+        <form id="platelog-auth-form" style="display:grid;gap:12px">
+          <h2>Sign in</h2>
+          <p class="small muted" style="margin:0">Plate Log keeps one private log. Sign in with your email and password (supports Face ID / Keychain autofill).</p>
+          <label class="field">Email<input id="platelog-email" type="email" autocomplete="username" required></label>
+          <label class="field">Password<input id="platelog-password" type="password" autocomplete="current-password" required></label>
+          <div class="row">
+            <button class="btn" type="submit" id="platelog-password-btn">Sign in</button>
             ${showSignup ? '<button class="btn ghost" type="button" id="platelog-signup-btn">Create account</button>' : ""}
+          </div>
+        </form>
+        <details>
+          <summary class="small muted">Or sign in with 6-digit email code</summary>
+          <div style="display:grid;gap:8px;margin-top:8px">
+            <button class="btn ghost" type="button" id="platelog-magic">Send sign-in code</button>
+            <div id="platelog-otp-wrap" hidden style="display:grid;gap:8px;padding-top:4px;border-top:1px solid var(--line, #d5dbe4)">
+              <label class="field">6-digit code from email<input id="platelog-otp" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="123456"></label>
+              <button class="btn" type="button" id="platelog-otp-btn">Verify code</button>
+            </div>
           </div>
         </details>
         <p class="small err" id="platelog-auth-err" hidden></p>
         <p class="small muted" id="platelog-auth-note" hidden></p>
-      </form>`;
+      </div>`;
     document.body.appendChild(root);
     root.querySelector("#platelog-auth-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      await passwordAuth(false);
+    });
+    const signupBtn = root.querySelector("#platelog-signup-btn");
+    if (signupBtn) signupBtn.onclick = () => passwordAuth(true);
+
+    root.querySelector("#platelog-magic").onclick = async () => {
       const email = root.querySelector("#platelog-email").value.trim();
       setAuthError("");
+      if (!email) {
+        setAuthError("Enter your email above first.");
+        root.querySelector("#platelog-email").focus();
+        return;
+      }
       setAuthNote("Sending code…");
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -790,7 +805,10 @@ function showAuth(message) {
       });
       if (error) {
         setAuthNote("");
-        setAuthError(error.message);
+        const msg = String(error.message || "");
+        setAuthError(/rate limit/i.test(msg)
+          ? "Email rate limit reached (2/hr on Supabase built-in mail). Use your password above instead."
+          : msg);
       } else {
         setAuthNote("Check your email for the 6-digit code (or tap the link if in the same browser).");
         const otpWrap = document.getElementById("platelog-otp-wrap");
@@ -799,8 +817,9 @@ function showAuth(message) {
           document.getElementById("platelog-otp")?.focus();
         }
       }
-    });
-    root.querySelector("#platelog-otp-btn").onclick = async () => {
+    };
+
+    const verifyOtp = async () => {
       const email = document.getElementById("platelog-email").value.trim();
       const token = document.getElementById("platelog-otp").value.trim();
       setAuthError("");
@@ -815,9 +834,13 @@ function showAuth(message) {
         setAuthError(error.message);
       }
     };
-    root.querySelector("#platelog-password-btn").onclick = () => passwordAuth(false);
-    const signupBtn = root.querySelector("#platelog-signup-btn");
-    if (signupBtn) signupBtn.onclick = () => passwordAuth(true);
+    root.querySelector("#platelog-otp-btn").onclick = verifyOtp;
+    root.querySelector("#platelog-otp").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        verifyOtp();
+      }
+    });
   }
   if (message) setAuthError(message);
   root.hidden = false;
@@ -841,12 +864,21 @@ async function passwordAuth(signUp) {
   const email = document.getElementById("platelog-email").value.trim();
   const password = document.getElementById("platelog-password").value;
   setAuthError("");
-  if (!email || !password) { setAuthError("Enter an email and a password."); return; }
+  setAuthNote(signUp ? "Creating account…" : "Signing in…");
+  if (!email || !password) {
+    setAuthNote("");
+    setAuthError("Enter an email and a password.");
+    return;
+  }
   const result = signUp
     ? await supabase.auth.signUp({ email, password })
     : await supabase.auth.signInWithPassword({ email, password });
-  if (result.error) setAuthError(result.error.message);
-  else if (signUp && !result.data.session) setAuthNote("Account created. If confirmation is on, use the email link. Otherwise sign in.");
+  if (result.error) {
+    setAuthNote("");
+    setAuthError(result.error.message);
+  } else if (signUp && !result.data.session) {
+    setAuthNote("Account created. If confirmation is on, use the email link. Otherwise sign in.");
+  }
 }
 
 function hideAuth() {
