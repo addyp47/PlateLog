@@ -1,5 +1,5 @@
 export const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-export const DEFAULT_MODEL = "gemini-3.5-flash";
+export const DEFAULT_MODEL = "gemini-4-hydrogen";
 export const QUICK_MODEL = "gemini-3.5-flash-lite";
 
 export type GeminiImagePart = {
@@ -42,6 +42,18 @@ export function buildImageParts(images: GeminiImagePart[] = []) {
   return { parts };
 }
 
+function buildThinkingConfig(model: string, json?: boolean, explicit?: string) {
+  const m = model.toLowerCase();
+  if (m.startsWith("gemini-4")) {
+    return { thinkingLevel: explicit || (json ? "low" : "medium") };
+  }
+  if (m.startsWith("gemini-3")) {
+    const defaultLevel = m.includes("lite") ? "minimal" : "low";
+    return { thinkingLevel: explicit || defaultLevel };
+  }
+  return { thinkingBudget: 0 };
+}
+
 export async function generateWithRetry(params: {
   apiKey: string;
   model: string;
@@ -50,12 +62,13 @@ export async function generateWithRetry(params: {
   json?: boolean;
   responseSchema?: unknown;
   maxTokens?: number;
+  thinkingLevel?: string;
 }) {
   const maxOutputTokens = Math.min(Number(params.maxTokens) || 4096, 8192);
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens,
-    // Flash models spend thinking tokens out of maxOutputTokens.
-    thinkingConfig: { thinkingBudget: 0 },
+    // Gemini 3/4 use thinkingLevel (thinking tokens share maxOutputTokens); Gemini 2.5 uses thinkingBudget.
+    thinkingConfig: buildThinkingConfig(params.model, params.json, params.thinkingLevel),
   };
   if (params.json) {
     generationConfig.responseMimeType = "application/json";

@@ -356,9 +356,10 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
-# sample proxies the Gemini API and must be called with a user JWT.
+# sample proxies the Gemini API and verifies the user's JWT directly via supabase.auth.getUser().
+# Keeping gateway verify_jwt = false avoids legacy-HS256 rejections on 2026 ECC signing keys / sb_publishable_ keys.
 [functions.sample]
-verify_jwt = true
+verify_jwt = false
 
 # The external assistant API authenticates with a personal bearer key, not a user JWT.
 [functions.api]

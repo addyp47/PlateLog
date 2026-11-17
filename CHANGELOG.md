@@ -2,6 +2,15 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.1] - 2026-11-17
+
+### Changed
+- **Gemini 4 Hydrogen Support (`supabase/functions/_shared/gemini.ts`):** Updated `DEFAULT_MODEL` to `gemini-4-hydrogen` and replaced hardcoded `thinkingBudget: 0` with model-aware `thinkingLevel` (`low` for Gemini 4 JSON extraction, `medium` for Coach check-ins, `minimal` for `gemini-3.5-flash-lite`, `thinkingBudget: 0` for legacy Gemini 2.5).
+- **Supabase Publishable Key & 2026 Project Support:**
+  - Upgraded vendored `@supabase/supabase-js` (`public/vendor/supabase.mjs`) from `2.49.1` to `2.119.0` for native `sb_publishable_` key handling.
+  - Updated `public/config.js` to the new Supabase project URL and publishable key.
+  - Set `verify_jwt = false` for `[functions.sample]` in `supabase/config.toml` (the function verifies user sessions directly via `supabase.auth.getUser()`), preventing legacy-HS256 gateway rejections on 2026 signing keys.
+
 ## [0.2.0] - 2026-11-17
 
 ### Added

@@ -19,12 +19,12 @@ This repo is set up to build, test, deploy, and release directly from GitHub:
    - Set Supabase secrets:
      ```bash
      supabase secrets set GEMINI_API_KEY=...
-     supabase secrets set GEMINI_MODEL=gemini-3.5-flash
+     supabase secrets set GEMINI_MODEL=gemini-4-hydrogen
      supabase secrets set GEMINI_MODEL_QUICK=gemini-3.5-flash-lite
      supabase secrets set ALLOWED_EMAILS=you@example.com
      supabase secrets set ALLOWED_ORIGINS=https://platelog.pages.dev,http://127.0.0.1:43123
      ```
-   - Update `public/config.js` with your Supabase URL and public anon key (safe to publish).
+   - Update `public/config.js` with your Supabase URL and public publishable/anon key (safe to publish).
 3. **Auto-deploy Supabase from GitHub (optional):**
    - In GitHub Repo **Settings → Secrets and variables → Actions**:
      - Variable `SUPABASE_DEPLOY_ENABLED` = `true`
