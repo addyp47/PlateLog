@@ -15,8 +15,12 @@ jobs:
           node-version: "24"
       - name: Run unit and release checks
         run: npm test
-      - name: Syntax check client adapter and service worker
+      - name: Syntax check client modules and edge functions
         run: |
           node --check public/adapter.js
+          node --check public/analytics.js
           node --check public/sw.js
           node --check public/config.example.js
+          node --check public/vendor/barcode.mjs
+          node --experimental-strip-types --check supabase/functions/api/index.ts
+          node --experimental-strip-types --check supabase/functions/sample/index.ts

@@ -93,7 +93,22 @@ function writeQueue(userId, items) {
 }
 
 function enqueueOp(userId, op) {
-  const q = readQueue(userId).filter((x) => !(x.collection === op.collection && x.id === op.id));
+  const queue = readQueue(userId);
+  const idx = queue.findIndex((x) => x.collection === op.collection && x.id === op.id);
+  if (idx >= 0 && op.type === "patch") {
+    const prev = queue[idx];
+    if (prev.type === "patch") {
+      queue[idx] = { ...prev, patch: { ...prev.patch, ...op.patch }, ts: Date.now() };
+      writeQueue(userId, queue);
+      return;
+    }
+    if (prev.type === "set") {
+      queue[idx] = { ...prev, value: { ...(prev.value || {}), ...op.patch }, ts: Date.now() };
+      writeQueue(userId, queue);
+      return;
+    }
+  }
+  const q = queue.filter((x) => !(x.collection === op.collection && x.id === op.id));
   q.push({ ...op, ts: Date.now() });
   writeQueue(userId, q);
 }
@@ -128,6 +143,12 @@ async function flushQueue() {
             doc_id: op.id,
             data: op.value || {},
           }, { onConflict: "user_id,collection,doc_id" });
+          if (error) throw error;
+        } else if (op.type === "patch") {
+          const { error } = await supabase.rpc("patch_day_fields", {
+            p_date: op.id,
+            p_patch: op.patch || {},
+          });
           if (error) throw error;
         } else if (op.type === "delete") {
           const { error } = await supabase.from("docs").delete().eq("user_id", userId).eq("collection", op.collection).eq("doc_id", op.id);
@@ -223,6 +244,10 @@ function mergeQueuedIntoRows(userId, collection, rows) {
   for (const op of q) {
     if (op.type === "delete") map.delete(op.id);
     else if (op.type === "set") map.set(op.id, { doc_id: op.id, data: op.value || {} });
+    else if (op.type === "patch") {
+      const cur = map.get(op.id)?.data || { date: op.id, foods: [], lifts: {} };
+      map.set(op.id, { doc_id: op.id, data: { ...cur, ...(op.patch || {}), date: op.id } });
+    }
   }
   return [...map.values()].sort((a, b) => (a.doc_id < b.doc_id ? -1 : a.doc_id > b.doc_id ? 1 : 0));
 }
@@ -241,7 +266,12 @@ class DocRef {
     const pending = readQueue(user.id).find((op) => op.collection === this.collection && op.id === this.id);
     if (pending) {
       if (pending.type === "delete") return { id: this.id, exists: false, data: () => undefined };
-      return { id: this.id, exists: true, data: () => pending.value || {} };
+      if (pending.type === "set") return { id: this.id, exists: true, data: () => pending.value || {} };
+      if (pending.type === "patch") {
+        const cached = readCache(user.id, this.collection) || [];
+        const hit = cached.find((r) => r.doc_id === this.id)?.data || {};
+        return { id: this.id, exists: true, data: () => ({ ...hit, ...(pending.patch || {}), date: this.id }) };
+      }
     }
     try {
       const { data, error } = await supabase.from("docs").select("data").eq("user_id", user.id).eq("collection", this.collection).eq("doc_id", this.id).maybeSingle();
@@ -424,6 +454,82 @@ export const db = {
   },
   collection(name) {
     return new CollectionRef(name);
+  },
+  async patchDay(date, patch) {
+    const user = await requireUser();
+    const fields = { ...(patch || {}) };
+    markLocalWrite("days", date);
+
+    const cached = readCache(user.id, "days") || [];
+    const existing = cached.find((r) => r.doc_id === date)?.data || { date, foods: [], lifts: {} };
+    const optimistic = { ...existing, ...fields, date, updated: Date.now() };
+    const nextCache = cached.filter((r) => r.doc_id !== date).concat([{ doc_id: date, data: optimistic }]);
+    writeCache(user.id, "days", nextCache);
+
+    if (!navigator.onLine) {
+      enqueueOp(user.id, { type: "patch", collection: "days", id: date, patch: fields });
+      notify(`doc:days/${date}`);
+      notify("col:days");
+      return optimistic;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc("patch_day_fields", {
+        p_date: date,
+        p_patch: fields,
+      });
+      let saved = data;
+      if (error) {
+        if (isNetworkError(error)) throw error;
+        // Fallback if RPC isn't available yet: read current row, merge fields, upsert.
+        const { data: rowData, error: readErr } = await supabase
+          .from("docs")
+          .select("data")
+          .eq("user_id", user.id)
+          .eq("collection", "days")
+          .eq("doc_id", date)
+          .maybeSingle();
+        if (readErr) throw readErr;
+        saved = { date, foods: [], lifts: {}, ...(rowData?.data || {}), ...fields, date, updated: Date.now() };
+        const { error: upErr } = await supabase.from("docs").upsert({
+          user_id: user.id,
+          collection: "days",
+          doc_id: date,
+          data: saved,
+        }, { onConflict: "user_id,collection,doc_id" });
+        if (upErr) throw upErr;
+      }
+      if (saved && typeof saved === "object") {
+        const curCache = readCache(user.id, "days") || [];
+        writeCache(user.id, "days", curCache.filter((r) => r.doc_id !== date).concat([{ doc_id: date, data: saved }]));
+      }
+      // Clear overridden keys from any stale queued op for this day.
+      const q = readQueue(user.id);
+      let changed = false;
+      const cleaned = q.flatMap((op) => {
+        if (op.collection !== "days" || op.id !== date) return [op];
+        if (op.type === "patch") {
+          const rest = { ...(op.patch || {}) };
+          for (const k of Object.keys(fields)) delete rest[k];
+          changed = true;
+          return Object.keys(rest).length ? [{ ...op, patch: rest }] : [];
+        }
+        changed = true;
+        return [];
+      });
+      if (changed) writeQueue(user.id, cleaned);
+      notify(`doc:days/${date}`);
+      notify("col:days");
+      return saved || optimistic;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        enqueueOp(user.id, { type: "patch", collection: "days", id: date, patch: fields });
+        notify(`doc:days/${date}`);
+        notify("col:days");
+        return optimistic;
+      }
+      throw err;
+    }
   },
 };
 

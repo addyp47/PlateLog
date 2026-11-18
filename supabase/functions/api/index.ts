@@ -20,6 +20,8 @@ const QUICK_LOG_SCHEMA = {
     name: { type: "STRING" },
     kcal: { type: "NUMBER" },
     protein: { type: "NUMBER" },
+    carbs: { type: "NUMBER" },
+    fat: { type: "NUMBER" },
     fiber: { type: "NUMBER" },
     assumptions: { type: "STRING" },
     error: { type: "STRING", nullable: true },
@@ -109,7 +111,7 @@ async function estimateAndLog(service: ReturnType<typeof createClient>, userId: 
     ? `\nThe person's saved foods (use exact numbers if matched):\n` +
       savedFoods
         .slice(0, 60)
-        .map((f) => `- ${f.n}: ${f.kcal} kcal, ${f.p} g protein, ${f.f} g fiber${f.u === "g" ? " per 100 g" : ""}`)
+        .map((f) => `- ${f.n}: ${f.kcal} kcal, ${f.p || 0} g protein, ${f.c || 0} g carbs, ${f.fat || 0} g fat, ${f.f || 0} g fiber${f.u === "g" ? " per 100 g" : ""}`)
         .join("\n")
     : "";
 
@@ -121,8 +123,8 @@ async function estimateAndLog(service: ReturnType<typeof createClient>, userId: 
   const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement).${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal or drink shown in the photo."}${myFoodsBlock}${dishBlock}${
     rest ? " Restaurant/takeout meal: match chain nutrition if known, otherwise assume restaurant portions with extra oil/butter." : ""
   }
-Third macro is FIBER (g), not fat. Assume common US brands and typical single adult portions when amounts aren't specified.
-Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber": number, "assumptions": short string, "error": null}. Drinks, coffee, milk, and shakes count as food — only set "error":"not food" for gibberish or non-consumables.`;
+Include kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), and fiber (dietary fiber g). Assume common US brands and typical single adult portions when amounts aren't specified.
+Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "assumptions": short string, "error": null}. Drinks, coffee, milk, and shakes count as food — only set "error":"not food" for gibberish or non-consumables.`;
 
   const images = imageData ? [{ media_type: imageMediaType, data: imageData }] : [];
   const imgResult = buildImageParts(images);
@@ -149,13 +151,15 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber
     name: String(parsed.name || text || "Logged meal").slice(0, 90),
     kcal: Math.round(Number(parsed.kcal)),
     protein: Math.round((Number(parsed.protein) || 0) * 10) / 10,
+    carbs: Math.round((Number(parsed.carbs) || 0) * 10) / 10,
+    fat: Math.round((Number(parsed.fat) || 0) * 10) / 10,
     fiber: Math.round((Number(parsed.fiber) || 0) * 10) / 10,
     rest,
   });
 
   const savedDay = await appendDayFood(service, userId, date, food);
   const totals = dayTotals(savedDay);
-  const targets = settingsRow?.data?.targets || { kcal: 2700, protein: 150, fiber: 35 };
+  const targets = settingsRow?.data?.targets || { kcal: 2700, protein: 150, carbs: 270, fat: 80, fiber: 35 };
 
   return {
     ok: true,
@@ -166,6 +170,8 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber
     remaining: {
       kcal: Math.round((targets.kcal || 0) - totals.kcal),
       protein: Math.round(((targets.protein || 0) - totals.protein) * 10) / 10,
+      carbs: Math.round(((targets.carbs || 0) - totals.carbs) * 10) / 10,
+      fat: Math.round(((targets.fat || 0) - totals.fat) * 10) / 10,
       fiber: Math.round(((targets.fiber || 0) - totals.fiber) * 10) / 10,
     },
   };
@@ -295,6 +301,7 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
     targets,
     todayTotals: todayStats,
     todaySteps: typeof todayDoc?.steps === "number" ? todayDoc.steps : null,
+    todayEnergyOut: typeof todayDoc?.energy_out === "number" ? todayDoc.energy_out : null,
     trendWeight: stats.trendWeight,
     trendDate: stats.trendDate,
     scaleWeight: stats.scaleWeight,
@@ -302,6 +309,7 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
     rateDetail: stats.rateDetail,
     maintenance: stats.maintenance,
     energyOutAvg: stats.energyOutAvg,
+    energyOutAvg7: stats.energyOutAvg7,
     energyOutDays: stats.energyOutDays,
     stepsAvg7: stats.stepsAvg7,
     stepsAvg: stats.stepsAvg,
@@ -314,9 +322,10 @@ function foodFromBody(body: Record<string, unknown>) {
     n: String(body.name || body.n || "").trim(),
     kcal: finite(body.kcal, 0),
     p: finite(body.protein ?? body.p, 0),
+    c: finite(body.carbs ?? body.c, 0),
+    fat: finite(body.fat, 0),
     f: finite(body.fiber ?? body.f, 0),
   };
-  if (body.fat != null && body.fat !== "") food.fat = finite(body.fat, 0);
   if (body.grams != null && body.grams !== "") food.g = finite(body.grams, 0);
   if (body.rest === true) food.rest = true;
   if (body.left === true) food.left = true;
@@ -328,6 +337,8 @@ function foodFromBody(body: Record<string, unknown>) {
         g: row.grams == null && row.g == null ? null : finite(row.grams ?? row.g, 0),
         kcal: finite(row.kcal, 0),
         p: finite(row.protein ?? row.p, 0),
+        c: finite(row.carbs ?? row.c, 0),
+        fat: finite(row.fat, 0),
         f: finite(row.fiber ?? row.f, 0),
       };
     });

@@ -1,8 +1,9 @@
-const CACHE_NAME = "platelog-shell-v0.2.7";
+const CACHE_NAME = "platelog-shell-v0.3.0";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
   "/adapter.js",
+  "/analytics.js",
   "/config.js",
   "/manifest.webmanifest",
   "/vendor/supabase.mjs",
@@ -39,8 +40,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for HTML, adapter.js, and config.js so UI and backend bindings never drift across deploys.
-  if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/adapter.js" || url.pathname === "/config.js") {
+  // Network-first for HTML, adapter.js, analytics.js, and config.js so UI and backend bindings never drift across deploys.
+  if (
+    url.pathname === "/" ||
+    url.pathname === "/index.html" ||
+    url.pathname === "/adapter.js" ||
+    url.pathname === "/analytics.js" ||
+    url.pathname === "/config.js"
+  ) {
     event.respondWith(networkFirst(req));
     return;
   }

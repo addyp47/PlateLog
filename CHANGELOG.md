@@ -2,6 +2,22 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.3.0] - 2026-11-17
+
+### Added
+- **Full Macro Tracking (`kcal`, `protein`, `carbs`, `fat`, `fiber`):**
+  - Updated all 5 macro bars, composer/edit/scale/leftovers/combos/My Foods forms, Gemini text/meal/label schemas, Open Food Facts barcode lookup, 7-day averages on **Progress**, Coach prompts, and `/functions/v1/api/log` + `/entries` + `/summary` endpoints. Legacy logged foods without carbs or fat continue to render and sum cleanly.
+- **Active Calories (`energy_out`) & Customizable Step Goal:**
+  - Added **Active kcal** input alongside weight and steps on **Today**, a 28-day **Active calories** bar chart (`#activeCard`) + 7-day active burn summary and step insights on **Progress**, configurable **Daily steps** target in **Targets** (`8000` default), and combined `/health` Apple Shortcut examples.
+
+### Improved
+- **Conflict-Safe Day Sync & In-App Update Prompt:**
+  - Replaced full-day `set()` overwrites on the client with field-level `patch_day_fields` RPC updates (`db.patchDay` in `public/adapter.js`) + offline patch coalescing so concurrent logs (e.g., iPhone food logging + Apple Health Shortcuts step sync) never clobber each other.
+  - Added an in-app **New version available → Reload** banner when the service worker installs an update.
+  - Unified frontend, Edge Functions, and tests on a single canonical `public/analytics.js` module and removed unused legacy Lift UI scaffolding.
+- **CI & Auto-Deploy (`ci.yml`, `deploy.yml`):**
+  - Added syntax verification for `public/analytics.js`, `public/vendor/barcode.mjs`, and Supabase Edge Functions in CI, and defaulted `SUPABASE_PROJECT_REF` in `deploy.yml` for one-step automatic Edge Function & DB migration deployments.
+
 ## [0.2.7] - 2026-11-17
 
 ### Fixed

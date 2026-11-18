@@ -1,6 +1,5 @@
-// Same math as the Plate Log page (trendSeries, rateLbWk, maintenance).
-// The page keeps those functions inline. This copy is what the external API runs.
-// Units are pounds. Fiber is the third macro (`f`), not fat.
+// Shared analytics module used by the web app, external API, and tests.
+// Units are pounds. Macros: p = protein (g), c = carbs (g), fat = fat (g), f = fiber (g).
 // maintenance = nearest 10 kcal of (average intake on complete days in the last
 // 21 days) minus (21-day scale-weight slope, lb/week) * 500.
 // It stays null until there are 10 weigh-ins and 10 complete days in that window.
@@ -51,6 +50,8 @@ export function dayTotals(day) {
   return {
     kcal: sum(foods.map((x) => +x.kcal || 0)),
     protein: sum(foods.map((x) => +x.p || 0)),
+    carbs: sum(foods.map((x) => +x.c || 0)),
+    fat: sum(foods.map((x) => +x.fat || 0)),
     fiber: sum(foods.map((x) => +x.f || 0)),
     n: foods.length,
   };
@@ -116,10 +117,11 @@ export function analyze(daysInput, today = todayStr()) {
   const tr = trendSeries();
   const last = tr[tr.length - 1] || null;
   const rate = rateLbWk();
+  const win7Start = addDays(today, -6);
   const outs = sortedDates().filter((s) => typeof days[s].energy_out === "number");
+  const out7 = outs.filter((s) => s >= win7Start && s <= today);
   const stepAll = sortedDates().filter((s) => typeof days[s].steps === "number");
-  const step7Start = addDays(today, -6);
-  const step7 = stepAll.filter((s) => s >= step7Start && s <= today);
+  const step7 = stepAll.filter((s) => s >= win7Start && s <= today);
   return {
     units: "lb",
     trendWeight: last ? Math.round(last.t * 10) / 10 : null,
@@ -129,7 +131,9 @@ export function analyze(daysInput, today = todayStr()) {
     rateDetail: rate,
     maintenance: maintenance(),
     series: tr,
+    nutritionWindow,
     energyOutAvg: outs.length ? Math.round(avg(outs.map((s) => days[s].energy_out))) : null,
+    energyOutAvg7: out7.length ? Math.round(avg(out7.map((s) => days[s].energy_out))) : null,
     energyOutDays: outs.length,
     stepsAvg7: step7.length ? Math.round(avg(step7.map((s) => days[s].steps))) : null,
     stepsAvg: stepAll.length ? Math.round(avg(stepAll.map((s) => days[s].steps))) : null,

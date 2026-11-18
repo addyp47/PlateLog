@@ -48,9 +48,11 @@ test("incomplete days and a short history do not invent a TDEE", () => {
   assert.equal(analyze({ "2026-11-01": day(180, 2000) }, "2026-11-01").ratePerWeek, null);
 });
 
-test("shared analytics matches the edge-function copy", () => {
+test("shared analytics matches the client and edge-function copies", () => {
+  const pub = readFileSync(new URL("../public/analytics.js", import.meta.url), "utf8");
   const a = readFileSync(new URL("../shared/analytics.js", import.meta.url), "utf8");
   const b = readFileSync(new URL("../supabase/functions/_shared/analytics.js", import.meta.url), "utf8");
+  assert.equal(a, pub);
   assert.equal(a, b);
 });
 
@@ -58,24 +60,30 @@ test("export shape is one object keyed by collection", () => {
   const root = {
     exported: "2026-11-17T00:00:00.000Z",
     source: "platelog-artifact",
-    settings: { main: { targets: { kcal: 2700, protein: 150, fiber: 35, goal: "cut" }, exercises: [], dishes: [] } },
-    days: { "2026-11-01": { date: "2026-11-01", weight: 172.4, complete: true, foods: [{ n: "Oats", kcal: 300, p: 10, f: 6 }], lifts: {} } },
-    foods: { f1: { n: "Chicken breast, cooked", kcal: 165, p: 31, f: 0, u: "g" } },
-    combos: { c1: { n: "Breakfast", items: [{ n: "Oats", kcal: 300, p: 10, f: 6 }] } },
+    settings: { main: { targets: { kcal: 2700, protein: 150, carbs: 270, fat: 80, fiber: 35, steps: 8000, goal: "cut" }, dishes: [] } },
+    days: { "2026-11-01": { date: "2026-11-01", weight: 172.4, complete: true, foods: [{ n: "Oats", kcal: 300, p: 10, c: 54, fat: 5, f: 6 }], lifts: {} } },
+    foods: { f1: { n: "Chicken breast, cooked", kcal: 165, p: 31, c: 0, fat: 3.6, f: 0, u: "g" } },
+    combos: { c1: { n: "Breakfast", items: [{ n: "Oats", kcal: 300, p: 10, c: 54, fat: 5, f: 6 }] } },
     checkins: {},
   };
   const { counts } = countExport(root);
   assert.deepEqual(counts, { settings: 1, days: 1, foods: 1, combos: 1, checkins: 0 });
 });
 
-test("analyze aggregates 7-day and overall daily steps", () => {
+test("analyze aggregates steps, active calories, and full macros", () => {
   const days = {
-    "2026-11-01": { ...day(175, 2200), steps: 6000 },
-    "2026-11-10": { ...day(174, 2200), steps: 8000 },
-    "2026-11-12": { ...day(173.8, 2200), steps: 10000 },
+    "2026-11-01": { ...day(175, 2200), steps: 6000, energy_out: 400 },
+    "2026-11-10": { ...day(174, 2200), steps: 8000, energy_out: 600, foods: [{ n: "Bowl", kcal: 700, p: 50, c: 75, fat: 20, f: 10 }] },
+    "2026-11-12": { ...day(173.8, 2200), steps: 10000, energy_out: 800 },
   };
   const summary = analyze(days, "2026-11-12");
   assert.equal(summary.stepsAvg7, 9000);
   assert.equal(summary.stepsAvg, 8000);
   assert.equal(summary.stepsDays, 3);
+  assert.equal(summary.energyOutAvg7, 700);
+  assert.equal(summary.energyOutAvg, 600);
+  assert.equal(summary.energyOutDays, 3);
+  const win = summary.nutritionWindow(7);
+  const nov10 = win.find((d) => d.s === "2026-11-10");
+  assert.deepEqual({ protein: nov10.protein, carbs: nov10.carbs, fat: nov10.fat, fiber: nov10.fiber }, { protein: 50, carbs: 75, fat: 20, fiber: 10 });
 });
