@@ -2,6 +2,12 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.4.3] - 2026-11-18
+
+### Fixed
+- **Allow Any Decimal Values Across All Numeric Inputs (`public/index.html`):**
+  - Switched all `<input type="number">` fields (servings, grams, calories, macros, weight, body fat %, waist, targets, My Foods, and photo item grams) to `step="any"` and added `novalidate` on `#foodForm` so decimals like `1.2`, `0.33`, or `14.7` never trigger browser `"Please enter a valid value"` errors.
+
 ## [0.4.2] - 2026-11-18
 
 ### Improved
