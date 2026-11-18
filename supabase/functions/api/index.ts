@@ -179,11 +179,25 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs
   };
 }
 
+function normalizeBodyFat(raw: unknown): number | null | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  if (raw === null) return null;
+  let bf = finite(raw, NaN);
+  // Apple Health / Shortcuts sometimes exports percentages as 0.182 instead of 18.2.
+  if (bf > 0 && bf < 1) bf *= 100;
+  if (!Number.isFinite(bf) || bf < 3 || bf > 70) {
+    throw new HttpError(400, "body_fat must be between 3 and 70 (%)");
+  }
+  return Math.round(bf * 10) / 10;
+}
+
 async function setWeight(service: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const date = assertDate(body.date || todayStr());
   const weight = finite(body.weight, NaN);
   if (!Number.isFinite(weight) || weight <= 0 || weight > 700) throw new HttpError(400, "weight must be a positive number");
   const patch: Record<string, unknown> = { weight: Math.round(weight * 10) / 10 };
+  const bf = normalizeBodyFat(body.body_fat ?? body.bodyFat ?? body.fat_pct);
+  if (bf !== undefined) patch.body_fat = bf;
   if (body.energy_out === null) patch.energy_out = null;
   else if (body.energy_out != null && body.energy_out !== "") patch.energy_out = finite(body.energy_out, NaN);
   if (body.steps === null) patch.steps = null;
@@ -229,6 +243,8 @@ function healthPatchFromEntry(entry: Record<string, unknown>) {
     if (!Number.isFinite(weight) || weight <= 0 || weight > 700) throw new HttpError(400, "weight must be a positive number");
     patch.weight = Math.round(weight * 10) / 10;
   }
+  const bf = normalizeBodyFat(entry.body_fat ?? entry.bodyFat ?? entry.fat_pct);
+  if (bf !== undefined) patch.body_fat = bf;
   const rawOut = entry.energy_out ?? entry.active_kcal;
   if (rawOut === null) patch.energy_out = null;
   else if (rawOut != null && rawOut !== "") {
@@ -251,12 +267,12 @@ async function syncHealth(service: ReturnType<typeof createClient>, userId: stri
       if (!Object.keys(patch).length) continue;
       updated.push(await patchDayFields(service, userId, date, patch));
     }
-    if (!updated.length) throw new HttpError(400, "Provide at least one of steps, weight, or energy_out");
+    if (!updated.length) throw new HttpError(400, "Provide at least one of steps, weight, body_fat, or energy_out");
     return { ok: true, count: updated.length, days: updated };
   }
   const date = assertDate(body.date || todayStr());
   const patch = healthPatchFromEntry(body);
-  if (!Object.keys(patch).length) throw new HttpError(400, "Provide at least one of steps, weight, or energy_out");
+  if (!Object.keys(patch).length) throw new HttpError(400, "Provide at least one of steps, weight, body_fat, or energy_out");
   return { ok: true, day: await patchDayFields(service, userId, date, patch) };
 }
 
@@ -304,12 +320,20 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
     todayTotals: todayStats,
     todaySteps: typeof todayDoc?.steps === "number" ? todayDoc.steps : null,
     todayEnergyOut: typeof todayDoc?.energy_out === "number" ? todayDoc.energy_out : null,
+    todayBodyFat: typeof todayDoc?.body_fat === "number" ? todayDoc.body_fat : null,
     trendWeight: stats.trendWeight,
     trendDate: stats.trendDate,
     scaleWeight: stats.scaleWeight,
     ratePerWeek: stats.ratePerWeek,
     rateDetail: stats.rateDetail,
     maintenance: stats.maintenance,
+    scaleBodyFat: stats.scaleBodyFat,
+    trendBodyFat: stats.trendBodyFat,
+    bodyFatDate: stats.bodyFatDate,
+    bodyFatDays: stats.bodyFatDays,
+    bodyFatRatePerWeek: stats.bodyFatRatePerWeek,
+    leanMass: stats.leanMass,
+    fatMass: stats.fatMass,
     energyOutAvg: stats.energyOutAvg,
     energyOutAvg7: stats.energyOutAvg7,
     energyOutDays: stats.energyOutDays,

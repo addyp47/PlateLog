@@ -65,29 +65,34 @@ export function analyze(daysInput, today = todayStr()) {
       .filter((s) => typeof days[s].weight === "number")
       .map((s) => ({ s, w: days[s].weight }));
   }
-  function trendSeries() {
-    const pts = weighIns();
+  function bodyFats() {
+    return sortedDates()
+      .filter((s) => typeof days[s].body_fat === "number")
+      .map((s) => ({ s, bf: days[s].body_fat }));
+  }
+  function emaSeries(pts, key) {
     let ema = null;
     let prev = null;
     const out = [];
     for (const p of pts) {
-      if (ema === null) ema = p.w;
+      const val = p[key];
+      if (ema === null) ema = val;
       else {
         const gap = dayNum(p.s) - dayNum(prev);
-        ema = ema + (1 - Math.pow(0.9, gap)) * (p.w - ema);
+        ema = ema + (1 - Math.pow(0.9, gap)) * (val - ema);
       }
       prev = p.s;
-      out.push({ s: p.s, w: p.w, t: ema });
+      out.push({ ...p, t: ema });
     }
     return out;
   }
-  function rateLbWk(windowDays = 21) {
+  function linearRatePerWeek(pts, key, windowDays = 21) {
     const end = today;
     const start = addDays(end, -windowDays);
-    const pts = weighIns().filter((p) => p.s > start && p.s <= end);
-    if (pts.length < 6) return null;
-    const xs = pts.map((p) => dayNum(p.s));
-    const ys = pts.map((p) => p.w);
+    const sub = pts.filter((p) => p.s > start && p.s <= end);
+    if (sub.length < 6) return null;
+    const xs = sub.map((p) => dayNum(p.s));
+    const ys = sub.map((p) => p[key]);
     const mx = avg(xs);
     const my = avg(ys);
     let num = 0;
@@ -97,7 +102,7 @@ export function analyze(daysInput, today = todayStr()) {
       den += (x - mx) ** 2;
     });
     if (!den) return null;
-    return { rate: (num / den) * 7, n: pts.length };
+    return { rate: (num / den) * 7, n: sub.length };
   }
   function nutritionWindow(n) {
     const out = [];
@@ -109,19 +114,24 @@ export function analyze(daysInput, today = todayStr()) {
     return out;
   }
   function maintenance() {
-    const r = rateLbWk(21);
+    const r = linearRatePerWeek(weighIns(), "w", 21);
     const logged = nutritionWindow(21).filter((d) => days[d.s] && days[d.s].complete);
     if (!r || r.n < 10 || logged.length < 10) return null;
     return Math.round((avg(logged.map((d) => d.kcal)) - r.rate * 500) / 10) * 10;
   }
-  const tr = trendSeries();
+  const tr = emaSeries(weighIns(), "w");
+  const bfTr = emaSeries(bodyFats(), "bf");
   const last = tr[tr.length - 1] || null;
-  const rate = rateLbWk();
+  const lastBf = bfTr[bfTr.length - 1] || null;
+  const rate = linearRatePerWeek(tr, "w", 21);
+  const bfRate = linearRatePerWeek(bfTr, "bf", 21);
   const win7Start = addDays(today, -6);
   const outs = sortedDates().filter((s) => typeof days[s].energy_out === "number");
   const out7 = outs.filter((s) => s >= win7Start && s <= today);
   const stepAll = sortedDates().filter((s) => typeof days[s].steps === "number");
   const step7 = stepAll.filter((s) => s >= win7Start && s <= today);
+  const leanMass = last && lastBf ? Math.round(last.t * (1 - lastBf.t / 100) * 10) / 10 : null;
+  const fatMass = last && lastBf ? Math.round(last.t * (lastBf.t / 100) * 10) / 10 : null;
   return {
     units: "lb",
     trendWeight: last ? Math.round(last.t * 10) / 10 : null,
@@ -131,6 +141,15 @@ export function analyze(daysInput, today = todayStr()) {
     rateDetail: rate,
     maintenance: maintenance(),
     series: tr,
+    scaleBodyFat: lastBf ? Math.round(lastBf.bf * 10) / 10 : null,
+    trendBodyFat: lastBf ? Math.round(lastBf.t * 10) / 10 : null,
+    bodyFatDate: lastBf ? lastBf.s : null,
+    bodyFatDays: bfTr.length,
+    bodyFatRatePerWeek: bfRate ? bfRate.rate : null,
+    bodyFatRateDetail: bfRate,
+    bfSeries: bfTr,
+    leanMass,
+    fatMass,
     nutritionWindow,
     energyOutAvg: outs.length ? Math.round(avg(outs.map((s) => days[s].energy_out))) : null,
     energyOutAvg7: out7.length ? Math.round(avg(out7.map((s) => days[s].energy_out))) : null,

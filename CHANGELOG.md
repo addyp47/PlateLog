@@ -2,6 +2,16 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.4.0] - 2026-11-18
+
+### Added
+- **Withings Smart Scale OAuth2 & Webhook Auto-Sync (`supabase/functions/withings/index.ts`, `supabase/migrations/20261118000000_withings.sql`, `supabase/config.toml`, `public/adapter.js`):**
+  - Added direct Withings account linking in **Targets → Withings Smart Scale** with server-side `service_role`-only token storage, proactive/reactive refresh-token rotation, initial 90-day backfill (`weight` + `body_fat`), on-demand **Sync 90 d** / **Backfill 365 d** actions, and automatic `notify` (`appli=1`) webhook push updates whenever you step on the scale.
+- **Body Fat % & Lean Mass Tracking (`public/analytics.js`, `shared/analytics.js`, `supabase/functions/_shared/analytics.js`, `public/index.html`, `supabase/functions/api/index.ts`):**
+  - Added gap-adjusted EMA `trendBodyFat`, 21-day `bodyFatRatePerWeek`, and derived `leanMass` / `fatMass` estimates computed from smoothed weight × body fat %.
+  - Added **Body fat (%)** input + Trend BF% / Est. Lean lb stat chip on **Today**, a **Body Fat & Lean Mass** trend chart card (`#bfCard`) + 21-day body fat trend insights on **Progress**, and body composition metrics in **Coach Check-in** prompts.
+  - Added `body_fat` validation (auto-normalizing Apple Health `0..1` decimal ratios like `0.182` to `18.2%`) across `POST /functions/v1/api/weight`, `POST /functions/v1/api/health`, and `GET /functions/v1/api/summary`.
+
 ## [0.3.1] - 2026-11-17
 
 ### Added

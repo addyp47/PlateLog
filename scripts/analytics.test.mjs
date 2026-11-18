@@ -87,3 +87,24 @@ test("analyze aggregates steps, active calories, and full macros", () => {
   const nov10 = win.find((d) => d.s === "2026-11-10");
   assert.deepEqual({ protein: nov10.protein, carbs: nov10.carbs, fat: nov10.fat, fiber: nov10.fiber }, { protein: 50, carbs: 75, fat: 20, fiber: 10 });
 });
+
+test("analyze tracks body_fat EMA trend, ratePerWeek, leanMass, and fatMass", () => {
+  const days = {};
+  for (let i = 0; i < 14; i++) {
+    const date = addDays("2026-11-01", i);
+    days[date] = {
+      ...day(200, 2200),
+      body_fat: Number((20 - i * 0.1).toFixed(1)),
+    };
+  }
+  const summary = analyze(days, "2026-11-14");
+  assert.equal(summary.scaleBodyFat, 18.7);
+  assert.equal(summary.bodyFatDays, 14);
+  assert.equal(summary.bfSeries.length, 14);
+  assert.ok(summary.trendBodyFat > 18.7 && summary.trendBodyFat < 20);
+  assert.ok(summary.bodyFatRatePerWeek !== null && summary.bodyFatRatePerWeek < 0);
+  assert.equal(summary.leanMass, Math.round(200 * (1 - summary.bfSeries[13].t / 100) * 10) / 10);
+  assert.equal(summary.fatMass, Math.round(200 * (summary.bfSeries[13].t / 100) * 10) / 10);
+  assert.ok(Math.abs((summary.leanMass + summary.fatMass) - 200) <= 0.2);
+});
+

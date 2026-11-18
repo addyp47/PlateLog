@@ -1007,6 +1007,15 @@ export function getApiBaseUrl() {
   return `${PLATELOG_CONFIG.supabaseUrl.replace(/\/$/, "")}/functions/v1/api`;
 }
 
+export async function withingsAction(action, params = {}) {
+  await authReady;
+  const { data, error } = await supabase.functions.invoke("withings", {
+    body: { action, ...params },
+  });
+  if (error || data?.error) throw await sampleError(error, data);
+  return data || {};
+}
+
 let resolveAuth;
 export const authReady = new Promise((resolve) => { resolveAuth = resolve; });
 
@@ -1051,6 +1060,7 @@ const api = {
   listKeys,
   createKey,
   revokeKey,
+  withingsAction,
   signOut,
   getUserEmail,
   getApiBaseUrl,

@@ -24,3 +24,4 @@ jobs:
           node --check public/vendor/barcode.mjs
           node --experimental-strip-types --check supabase/functions/api/index.ts
           node --experimental-strip-types --check supabase/functions/sample/index.ts
+          node --experimental-strip-types --check supabase/functions/withings/index.ts

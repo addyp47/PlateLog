@@ -43,6 +43,7 @@ try {
   --plate-red: #C33440;    /* protein */
   --plate-orange: #D96B27; /* fat & active calories */
   --plate-green: #2C8552;  /* fiber & steps */
+  --plate-purple: #8448C9; /* body fat % */
   --good: #2C8552; --warn: #B7791F; --bad: #C33440;
   --good-bg: #E2F2E8; --warn-bg: #FBF0DC; --bad-bg: #F9E3E5; --info-bg: #E3EAF9;
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -52,14 +53,14 @@ try {
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0F1217; --surface: #171B22; --sunk: #1F242D; --line: #2C333F; --fg: #E8ECF2; --muted: #9AA4B4;
   --accent: #6E95F0; --accent-fg: #0F1217;
-  --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-orange: #F08E4D; --plate-green: #55BC7F;
+  --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-orange: #F08E4D; --plate-green: #55BC7F; --plate-purple: #B282F6;
   --good: #55BC7F; --warn: #E5B53E; --bad: #EE6670;
   --good-bg: #16301F; --warn-bg: #33290F; --bad-bg: #3A1A1D; --info-bg: #1A2640;
   color-scheme: dark; accent-color: var(--accent); } }
 :root[data-theme="dark"] {
   --bg: #0F1217; --surface: #171B22; --sunk: #1F242D; --line: #2C333F; --fg: #E8ECF2; --muted: #9AA4B4;
   --accent: #6E95F0; --accent-fg: #0F1217;
-  --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-orange: #F08E4D; --plate-green: #55BC7F;
+  --plate-blue: #6E95F0; --plate-yellow: #E5B53E; --plate-red: #EE6670; --plate-orange: #F08E4D; --plate-green: #55BC7F; --plate-purple: #B282F6;
   --good: #55BC7F; --warn: #E5B53E; --bad: #EE6670;
   --good-bg: #16301F; --warn-bg: #33290F; --bad-bg: #3A1A1D; --info-bg: #1A2640;
   color-scheme: dark; accent-color: var(--accent); }
@@ -291,10 +292,12 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
       <h2>Morning weigh-in &amp; activity</h2>
       <div class="weigh">
         <label class="field">Scale weight (lb)<input id="weightInput" type="number" inputmode="decimal" step="0.1" min="50" max="500" placeholder="—"></label>
+        <label class="field">Body fat (%)<input id="bodyFatInput" type="number" inputmode="decimal" step="0.1" min="3" max="70" placeholder="—"></label>
         <label class="field">Steps<input id="stepsInput" type="number" inputmode="numeric" step="100" min="0" max="200000" placeholder="—"></label>
         <label class="field">Active kcal<input id="activeKcalInput" type="number" inputmode="numeric" step="10" min="0" max="20000" placeholder="—"></label>
         <div class="stat"><span class="v" id="trendNow">—</span><span class="k">Trend weight</span></div>
         <div class="stat"><span class="v" id="trendRate">—</span><span class="k">Per week (21 d)</span></div>
+        <div class="stat" id="bfStat" hidden><span class="v" id="bfNow">—</span><span class="k" id="bfSub">Trend BF%</span></div>
       </div>
       <p class="small muted" style="margin:0">Weigh after waking and using the bathroom. Daily readings swing 1–3 lb; the trend line smooths that out.</p>
     </div>
@@ -381,6 +384,15 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
       </div>
       <div class="chartreadout" id="weightReadout">Tap or drag chart to inspect</div>
       <div id="weightChart"></div>
+    </div>
+
+    <div class="card" id="bfCard" hidden>
+      <div class="row spread"><h2>Body composition</h2>
+        <div class="legend"><span><i style="background:var(--plate-purple);opacity:.35"></i>Scale %</span><span><i style="background:var(--plate-purple)"></i>Trend %</span></div>
+      </div>
+      <div class="grid2" id="bfStats"></div>
+      <div class="chartreadout" id="bfReadout">Tap or drag chart to inspect</div>
+      <div id="bfChart"></div>
     </div>
 
     <div class="card">
@@ -498,6 +510,25 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
       </div>
     </details>
 
+    <details class="card" id="withingsCard">
+      <summary><h2>Withings Smart Scale</h2></summary>
+      <div class="cardbody">
+        <p class="small muted" style="margin:0">Automatically sync scale weight and estimated body fat % directly from your Withings account when you weigh in.</p>
+        <p class="small" id="withingsStatus" style="margin:0">Checking Withings status…</p>
+        <div class="row">
+          <button class="btn" id="withingsConnectBtn" type="button" hidden>Connect Withings</button>
+          <button class="btn" id="withingsSyncBtn" type="button" hidden>Sync now</button>
+          <button class="btn ghost sm" id="withingsSyncYearBtn" type="button" hidden>Backfill 365 d</button>
+          <button class="btn ghost sm" id="withingsDisconnectBtn" type="button" hidden>Disconnect</button>
+          <span class="small muted" id="withingsNote"></span>
+        </div>
+        <div id="withingsSetup" hidden style="display:grid;gap:6px;padding-top:4px;border-top:1px solid var(--line)">
+          <p class="small muted" style="margin:0"><b>One-time developer app setup:</b> register a free Public API app at <a href="https://developer.withings.com/" target="_blank" rel="noopener">developer.withings.com</a> with this Callback / Webhook URL, then save <code>WITHINGS_CLIENT_ID</code> and <code>WITHINGS_CLIENT_SECRET</code> in Supabase Edge Function secrets:</p>
+          <p class="small muted" style="margin:0"><b>Callback URL:</b> <code id="withingsCallbackUrl">https://&lt;project&gt;.supabase.co/functions/v1/withings</code> <button class="linkbtn" type="button" id="copyWithingsUrlBtn">Copy</button></p>
+        </div>
+      </div>
+    </details>
+
     <details class="card" id="apiCard">
       <summary><h2>External API &amp; iOS Shortcuts</h2></summary>
       <div class="cardbody">
@@ -508,15 +539,15 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
         <p class="small muted" style="margin:4px 0 0"><b>Base URL:</b> <code id="apiBaseUrl">https://&lt;project&gt;.supabase.co/functions/v1/api</code> <button class="linkbtn" type="button" id="copyApiUrlBtn">Copy</button></p>
         <p class="small muted" style="margin:4px 0 0"><b>Apple Health Steps Automation</b> (Find Health Samples → Steps for Today → Sum → Get Contents of URL <code>POST /steps</code> with <code>Authorization: Bearer pl_...</code>):</p>
         <code class="blk">{"steps": 9420}</code>
-        <p class="small muted" style="margin:4px 0 0"><b>Combined Apple Health Sync</b> (<code>POST /health</code> — Steps + Active Energy (<code>energy_out</code>) + Weight; supports single day or <code>entries</code> array):</p>
-        <code class="blk">{"steps": 9420, "energy_out": 640, "weight": 172.4}</code>
+        <p class="small muted" style="margin:4px 0 0"><b>Combined Apple Health Sync</b> (<code>POST /health</code> — Steps + Active Energy (<code>energy_out</code>) + Weight + Body Fat % (<code>body_fat</code>); supports single day or <code>entries</code> array):</p>
+        <code class="blk">{"steps": 9420, "energy_out": 640, "weight": 172.4, "body_fat": 17.4}</code>
         <p class="small muted" style="margin:4px 0 0"><b>Dictate / Snap Meal</b> (<code>POST /log</code>):</p>
         <code class="blk">{"text": "200g chicken breast and 1 cup white rice"}</code>
       </div>
     </details>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.3.1</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.4.0</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -782,6 +813,8 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     const d = day(curDate);
     const wi = $("weightInput");
     if (document.activeElement !== wi) wi.value = typeof d.weight === "number" ? d.weight : "";
+    const bi = $("bodyFatInput");
+    if (document.activeElement !== bi) bi.value = typeof d.body_fat === "number" ? d.body_fat : "";
     const si = $("stepsInput");
     if (document.activeElement !== si) si.value = typeof d.steps === "number" ? d.steps : "";
     const ai = $("activeKcalInput");
@@ -789,6 +822,12 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     const summary = getSummary();
     $("trendNow").textContent = summary.trendWeight != null ? summary.trendWeight.toFixed(1) + " lb" : "—";
     $("trendRate").textContent = summary.ratePerWeek != null ? (summary.ratePerWeek >= 0 ? "+" : "") + summary.ratePerWeek.toFixed(2) + " lb" : "—";
+    const hasBf = summary.trendBodyFat != null;
+    $("bfStat").hidden = !hasBf;
+    if (hasBf) {
+      $("bfNow").textContent = summary.trendBodyFat.toFixed(1) + "%";
+      $("bfSub").textContent = summary.leanMass != null ? `Lean ${summary.leanMass.toFixed(1)} lb` : "Trend BF%";
+    }
 
     const t = dayTotals(curDate), tg = settings.targets;
     const bars = [
@@ -1249,7 +1288,7 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
     const out = []; for (let v = start; v <= end + 1e-9; v += step) out.push(+v.toFixed(6));
     return out;
   }
-  function lineChart(el, { pts, x0, x1, line, dots, yFmt = v => v, color, empty, readoutEl }) {
+  function lineChart(el, { pts, x0, x1, line, dots, yFmt = v => v, readoutFmt, color, empty, readoutEl }) {
     if (!pts.length) { el.innerHTML = `<p class="small muted" style="margin:0">${empty}</p>`; if (readoutEl) readoutEl.textContent = ""; return; }
     const W = 640, H = 220, L = 46, R = 12, T = 12, B = 26;
     const ys = []; pts.forEach(p => { if (dots && p.y != null) ys.push(p.y); if (line && p.l != null) ys.push(p.l); });
@@ -1270,10 +1309,10 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
       }
       const e = lp[lp.length - 1]; if (e) g += `<circle cx="${X(e.s)}" cy="${Y(e.l)}" r="4.5" fill="${color}"/>`;
     }
-    g += `<line id="wtCross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3" hidden/>`;
+    g += `<line class="wt-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3" hidden/>`;
     el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
     const svg = el.querySelector("svg");
-    const cross = el.querySelector("#wtCross");
+    const cross = el.querySelector(".wt-cross");
     const showAt = (clientX) => {
       const rect = svg.getBoundingClientRect();
       const svgX = (clientX - rect.left) / rect.width * W;
@@ -1283,7 +1322,7 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
         if (dist < bestDist) { bestDist = dist; best = p; }
       }
       if (cross) { cross.setAttribute("x1", X(best.s)); cross.setAttribute("x2", X(best.s)); cross.removeAttribute("hidden"); }
-      if (readoutEl) readoutEl.textContent = `${fmtDate(best.s, { month: "short", day: "numeric" })} · Scale ${r1(best.y)} lb · Trend ${r1(best.l).toFixed(1)} lb`;
+      if (readoutEl) readoutEl.textContent = readoutFmt ? readoutFmt(best) : `${fmtDate(best.s, { month: "short", day: "numeric" })} · Scale ${r1(best.y)} lb · Trend ${r1(best.l).toFixed(1)} lb`;
     };
     svg.addEventListener("pointerdown", e => showAt(e.clientX));
     svg.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "mouse") showAt(e.clientX); });
@@ -1390,6 +1429,15 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
       else if (r.rate > goal.hi) tips.push({ k: "bad", h: `Trending above ${goal.label} range (${r.rate.toFixed(2)} lb/wk)`, b: `Target is ${goal.lo} to ${goal.hi} lb/wk. Trim about 150 kcal a day.` });
       else tips.push({ k: "good", h: `Weight trend is on target (${r.rate >= 0 ? "+" : ""}${r.rate.toFixed(2)} lb/wk)`, b: `Inside the ${goal.lo} to ${goal.hi} lb/wk range for a ${goal.label}. Keep calories where they are.` });
     }
+    if (summary.bodyFatRateDetail && summary.bodyFatRateDetail.n >= 6 && summary.trendBodyFat != null) {
+      const br = summary.bodyFatRateDetail.rate;
+      const dir = br <= -0.1 ? "dropping" : br >= 0.15 ? "creeping up" : "holding steady";
+      tips.push({
+        k: br >= 0.25 && tg.goal !== "lean" ? "warn" : "good",
+        h: `Body fat trend at ${summary.trendBodyFat.toFixed(1)}% (${dir}, ${br >= 0 ? "+" : ""}${br.toFixed(2)}%/wk)`,
+        b: `${summary.leanMass != null ? `Est. ${summary.leanMass.toFixed(1)} lb lean mass / ${summary.fatMass.toFixed(1)} lb fat mass. ` : ""}Scale BIA shifts with hydration, so watch the 21-day trend rather than single mornings.`
+      });
+    }
     const m = summary.maintenance;
     if (m) tips.push({ k: "good", h: `Your estimated maintenance is about ${m} kcal`, b: `Based on 3 weeks of intake against your weight trend. A ${goal.label} target is roughly ${goal === GOALS.cut ? m - 400 : goal === GOALS.lean ? m + 200 : m} kcal.` });
     if (wk.length >= 3) {
@@ -1475,6 +1523,34 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
     const start = addDays(todayStr(), -90);
     const wp = tr.filter(p => p.s >= start);
     lineChart($("weightChart"), { pts: wp.map(p => ({ s: p.s, y: p.w, l: p.t })), x0: wp.length ? dayNum(wp[0].s) : 0, x1: dayNum(todayStr()), line: true, dots: true, color: "var(--plate-blue)", yFmt: v => v, empty: "Log a morning weigh-in on the Today tab to start the trend line.", readoutEl: $("weightReadout") });
+
+    const bfp = (summary.bfSeries || []).filter(p => p.s >= start);
+    $("bfCard").hidden = !bfp.length;
+    if (bfp.length) {
+      const bfRate = summary.bodyFatRatePerWeek;
+      $("bfStats").innerHTML =
+        `<div class="stat"><span class="v" style="color:var(--plate-purple)">${summary.trendBodyFat.toFixed(1)}%</span><span class="k">Trend body fat · Scale ${summary.scaleBodyFat.toFixed(1)}%</span></div>` +
+        `<div class="stat"><span class="v">${summary.leanMass != null ? summary.leanMass.toFixed(1) + " lb" : "—"}</span><span class="k">${summary.fatMass != null ? `Est. lean · Fat ${summary.fatMass.toFixed(1)} lb` : "Est. lean mass"}${bfRate != null ? ` · ${bfRate >= 0 ? "+" : ""}${bfRate.toFixed(2)}%/wk` : ""}</span></div>`;
+      lineChart($("bfChart"), {
+        pts: bfp.map(p => ({ s: p.s, y: p.bf, l: p.t })),
+        x0: dayNum(bfp[0].s),
+        x1: dayNum(todayStr()),
+        line: true,
+        dots: true,
+        color: "var(--plate-purple)",
+        yFmt: v => v.toFixed(1) + "%",
+        readoutFmt: p => {
+          const wt = trendAt(p.s, summary);
+          const lean = wt ? ` · Est. lean ${r1(wt * (1 - p.l / 100)).toFixed(1)} lb` : "";
+          return `${fmtDate(p.s, { month: "short", day: "numeric" })} · Scale ${r1(p.y).toFixed(1)}% · Trend ${r1(p.l).toFixed(1)}%${lean}`;
+        },
+        empty: "",
+        readoutEl: $("bfReadout"),
+      });
+    } else {
+      $("bfStats").innerHTML = "";
+      $("bfChart").innerHTML = "";
+    }
 
     kcalChart($("kcalChart"), $("kcalReadout"));
     const w28 = summary.nutritionWindow(28);
@@ -1688,7 +1764,7 @@ Identify the reference object, then estimate the dish's diameter across the top,
     view = ["today", "progress", "settings"].includes(v) ? v : "today";
     document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
     ["today", "progress", "settings"].forEach(n => $("view-" + n).hidden = n !== view);
-    if (view === "settings") renderApiKeys();
+    if (view === "settings") { renderApiKeys(); renderWithings(); }
     try { localStorage.setItem("platelog.view", view); } catch (e) {}
     render();
   }
@@ -1703,6 +1779,14 @@ Identify the reference object, then estimate the dish's diameter across the top,
     else d.weight = r1(v);
     patchDay(curDate, { weight: isNaN(v) ? null : d.weight });
     renderToday(); toast(isNaN(v) ? "Weigh-in removed" : "Weigh-in saved");
+  });
+  $("bodyFatInput").addEventListener("change", e => {
+    const raw = e.target.value.trim(); const v = raw === "" ? NaN : parseFloat(raw); const d = ensureDay(curDate);
+    if (isNaN(v)) delete d.body_fat;
+    else if (v < 3 || v > 70) { toast("That body fat % looks off (enter 3–70)."); return; }
+    else d.body_fat = r1(v);
+    patchDay(curDate, { body_fat: isNaN(v) ? null : d.body_fat });
+    renderToday(); toast(isNaN(v) ? "Body fat removed" : "Body fat saved");
   });
   $("stepsInput").addEventListener("change", e => {
     const raw = e.target.value.trim(); const v = raw === "" ? NaN : parseInt(raw, 10); const d = ensureDay(curDate);
@@ -2262,14 +2346,92 @@ Leave error null unless no food or drink is visible (if none visible, set error=
     for (let i = 27; i >= 0; i--) {
       const s = addDays(end, -i); const d = days[s]; if (!d) continue;
       const t = dayTotals(s);
+      const bfNote = typeof d.body_fat === "number" ? ` (${d.body_fat}% bf)` : "";
       const stepNote = typeof d.steps === "number" ? `; ${Math.round(d.steps)} steps` : "";
       const activeNote = typeof d.energy_out === "number" ? `; ${Math.round(d.energy_out)} active kcal` : "";
-      out.push(`${s}: weight ${d.weight ?? "-"}${stepNote}${activeNote}; ${t.n ? `${Math.round(t.kcal)} kcal, ${Math.round(t.protein)}g P, ${Math.round(t.carbs)}g C, ${Math.round(t.fat)}g Fat, ${Math.round(t.fiber)}g Fiber${d.complete ? " (complete)" : " (incomplete)"}` : "no food"}`);
+      out.push(`${s}: weight ${d.weight ?? "-"}${bfNote}${stepNote}${activeNote}; ${t.n ? `${Math.round(t.kcal)} kcal, ${Math.round(t.protein)}g P, ${Math.round(t.carbs)}g C, ${Math.round(t.fat)}g Fat, ${Math.round(t.fiber)}g Fiber${d.complete ? " (complete)" : " (incomplete)"}` : "no food"}`);
     }
     const ci = checkins.filter(c => c.waist).map(c => `${c.date}: waist ${c.waist} in`).join("; ");
     if (ci) out.push("Monthly waist check-ins: " + ci);
     return out.join("\n");
   }
+  async function renderWithings() {
+    const api = window.platelog;
+    const statusEl = $("withingsStatus");
+    if (!api || !api.withingsAction || !statusEl) return;
+    try {
+      const st = await api.withingsAction("status");
+      if ($("withingsCallbackUrl") && st.callbackUrl) $("withingsCallbackUrl").textContent = st.callbackUrl;
+      $("withingsSetup").hidden = st.configured && st.connected;
+      $("withingsConnectBtn").hidden = !st.configured || st.connected;
+      $("withingsSyncBtn").hidden = !st.connected;
+      $("withingsSyncYearBtn").hidden = !st.connected;
+      $("withingsDisconnectBtn").hidden = !st.connected;
+      if (!st.configured) {
+        statusEl.textContent = "Withings API secrets (WITHINGS_CLIENT_ID / WITHINGS_CLIENT_SECRET) aren't set on Supabase yet.";
+        return;
+      }
+      if (!st.connected) {
+        statusEl.textContent = "Ready to connect. Sign in with Withings to auto-sync weight & body fat %.";
+        return;
+      }
+      const lastSync = st.lastSyncedAt ? new Date(st.lastSyncedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "never";
+      const hookNote = st.webhookActive ? "auto-sync active" : "manual sync";
+      statusEl.textContent = `Connected (ID ${st.withingsUserId || "linked"}) · ${hookNote} · last synced ${lastSync}.${st.lastError ? " Note: " + st.lastError : ""}`;
+    } catch (err) {
+      statusEl.textContent = err && err.message ? err.message : "Could not load Withings status.";
+    }
+  }
+  $("copyWithingsUrlBtn").onclick = async () => {
+    const text = $("withingsCallbackUrl")?.textContent || "";
+    try { await navigator.clipboard.writeText(text); toast("Copied Withings Callback URL"); } catch { toast("Copy failed—select the URL manually."); }
+  };
+  $("withingsConnectBtn").onclick = async () => {
+    const btn = $("withingsConnectBtn"); const note = $("withingsNote");
+    if (!window.platelog?.withingsAction) return;
+    btn.disabled = true; note.textContent = "Opening Withings…";
+    try {
+      const returnTo = `${location.origin}${location.pathname}`;
+      const res = await window.platelog.withingsAction("connect", { returnTo });
+      if (res && res.authUrl) location.href = res.authUrl;
+      else note.textContent = "Could not start Withings sign-in.";
+    } catch (err) {
+      note.textContent = err && err.message ? err.message : "Connect failed.";
+      btn.disabled = false;
+    }
+  };
+  async function syncWithingsNow(daysBack) {
+    const note = $("withingsNote"); const b1 = $("withingsSyncBtn"); const b2 = $("withingsSyncYearBtn");
+    if (!window.platelog?.withingsAction) return;
+    b1.disabled = true; b2.disabled = true;
+    note.textContent = daysBack > 90 ? "Syncing 365 days…" : "Syncing Withings…";
+    try {
+      const res = await window.platelog.withingsAction("sync", { days: daysBack });
+      const latest = res.latestWeight != null
+        ? ` Latest: ${res.latestWeight} lb${res.latestBodyFat != null ? ` · ${res.latestBodyFat}% bf` : ""} (${res.latestDate}).`
+        : "";
+      note.textContent = `Synced ${res.syncedDays || 0} day${res.syncedDays === 1 ? "" : "s"}.${latest}`;
+      toast(`Synced ${res.syncedDays || 0} Withings days.`);
+      renderWithings();
+    } catch (err) {
+      note.textContent = err && err.message ? err.message : "Sync failed.";
+    } finally { b1.disabled = false; b2.disabled = false; }
+  }
+  $("withingsSyncBtn").onclick = () => syncWithingsNow(90);
+  $("withingsSyncYearBtn").onclick = () => syncWithingsNow(365);
+  $("withingsDisconnectBtn").onclick = async () => {
+    if (!window.platelog?.withingsAction || !confirm("Disconnect your Withings scale? Existing weight and body fat history stays in Plate Log.")) return;
+    const note = $("withingsNote");
+    note.textContent = "Disconnecting…";
+    try {
+      await window.platelog.withingsAction("disconnect");
+      note.textContent = "Disconnected.";
+      renderWithings();
+    } catch (err) {
+      note.textContent = err && err.message ? err.message : "Disconnect failed.";
+    }
+  };
+
   async function renderApiKeys() {
     const api = window.platelog;
     const urlEl = $("apiBaseUrl");
@@ -2314,11 +2476,14 @@ Leave error null unless no food or drink is visible (if none visible, set error=
         if (img) images.push(img);
       }
     }
+    const bfSummary = summary.trendBodyFat != null
+      ? `; trend body fat ${summary.trendBodyFat.toFixed(1)}% (est. lean ${summary.leanMass ?? "n/a"} lb, fat ${summary.fatMass ?? "n/a"} lb${summary.bodyFatRatePerWeek != null ? `, ${summary.bodyFatRatePerWeek >= 0 ? "+" : ""}${summary.bodyFatRatePerWeek.toFixed(2)}%/wk` : ""})`
+      : "";
     const prompt = `You are a concise, evidence-based strength and nutrition coach.
 Athlete profile: ${formatProfile(settings.profile)}
 Goal: get leaner, stronger and build muscle. Current phase: ${GOALS[tg.goal]?.label}.
 Targets: ${tg.kcal} kcal, ${tg.protein} g protein, ${tg.carbs ?? DEFAULTS.targets.carbs} g carbs, ${tg.fat ?? DEFAULTS.targets.fat} g fat, ${tg.fiber} g fiber, ${(tg.steps ?? DEFAULTS.targets.steps).toLocaleString()} steps/day.
-Computed: trend weight ${lastTr ? r1(lastTr.t).toFixed(1) + " lb" : "n/a"}; 21-day rate ${r ? r.rate.toFixed(2) + " lb/wk" : "not enough data"}; estimated maintenance ${m ?? "not enough data"} kcal; 7-day avg steps ${summary.stepsAvg7 ?? "n/a"}; 7-day avg active kcal ${summary.energyOutAvg7 ?? "n/a"}.
+Computed: trend weight ${lastTr ? r1(lastTr.t).toFixed(1) + " lb" : "n/a"}; 21-day rate ${r ? r.rate.toFixed(2) + " lb/wk" : "not enough data"}; estimated maintenance ${m ?? "not enough data"} kcal${bfSummary}; 7-day avg steps ${summary.stepsAvg7 ?? "n/a"}; 7-day avg active kcal ${summary.energyOutAvg7 ?? "n/a"}.
 
 Last 28 days:
 ${summaryForClaude() || "(no entries yet)"}
@@ -2335,6 +2500,7 @@ Give a short weekly check-in: 1) what the data shows, 2) up to 4 specific change
           text: res.text,
           goal: GOALS[tg.goal]?.label || tg.goal,
           trendWeight: lastTr ? r1(lastTr.t) : null,
+          trendBodyFat: summary.trendBodyFat ?? null,
           ratePerWeek: r ? Math.round(r.rate * 100) / 100 : null,
           maintenance: m,
           usedPhoto: images.length > 0,
@@ -2346,7 +2512,21 @@ Give a short weekly check-in: 1) what the data shows, 2) up to 4 specific change
   };
 
   // ---------- boot ----------
-  try { const v = localStorage.getItem("platelog.view"); if (v && ["today", "progress", "settings"].includes(v)) view = v; } catch (e) {}
+  try {
+    const qs = new URLSearchParams(location.search);
+    const wParam = qs.get("withings");
+    if (wParam) {
+      view = "settings";
+      if ($("withingsCard")) $("withingsCard").open = true;
+      toast(wParam === "connected" ? "Withings scale connected and synced!" : `Withings sign-in: ${qs.get("reason") || wParam}`);
+      qs.delete("withings"); qs.delete("reason");
+      const clean = location.pathname + (qs.toString() ? "?" + qs.toString() : "") + location.hash;
+      history.replaceState(null, "", clean);
+    } else {
+      const v = localStorage.getItem("platelog.view");
+      if (v && ["today", "progress", "settings"].includes(v)) view = v;
+    }
+  } catch (e) {}
   setView(view);
   $("askClaude").hidden = true; $("askNote").hidden = true;
 
@@ -2380,6 +2560,7 @@ Give a short weekly check-in: 1) what the data shows, 2) up to 4 specific change
     }
     if (!dbNs) { offline(); return; }
     db = dbNs;
+    if (view === "settings") renderWithings();
     let gotDays = false;
     const timer = setTimeout(() => { if (!gotDays) { $("syncNote").textContent = "Connecting…"; } }, 10000);
     db.doc("settings/main").onSnapshot(s => {

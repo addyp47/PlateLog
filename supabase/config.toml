@@ -364,3 +364,8 @@ verify_jwt = false
 # The external assistant API authenticates with a personal bearer key, not a user JWT.
 [functions.api]
 verify_jwt = false
+
+# Withings handles authenticated user JWTs via supabase.auth.getUser(), plus browser OAuth callbacks and Withings HEAD/POST webhooks.
+[functions.withings]
+verify_jwt = false
+

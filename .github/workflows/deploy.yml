@@ -34,6 +34,7 @@ jobs:
           supabase db push --remote="$SUPABASE_PROJECT_REF" --yes
           supabase functions deploy sample --use-api --remote="$SUPABASE_PROJECT_REF" --yes
           supabase functions deploy api --use-api --remote="$SUPABASE_PROJECT_REF" --yes
+          supabase functions deploy withings --use-api --remote="$SUPABASE_PROJECT_REF" --yes
 
   deploy-cloudflare-pages:
     needs: test
