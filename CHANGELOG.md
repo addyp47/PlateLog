@@ -2,6 +2,13 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.7] - 2026-11-17
+
+### Fixed
+- **False "not a food" Estimate Rejections (`public/index.html`, `supabase/functions/api/index.ts`):**
+  - Made structured `error` schema fields `nullable: true` across `TEXT_ESTIMATE_SCHEMA`, `MEAL_SCHEMA`, `LABEL_SCHEMA`, `DISH_SCHEMA`, and `QUICK_LOG_SCHEMA`, and added `modelErr()` / `modelErrorText()` helpers so sentinel strings like `"none"`, `"null"`, or `"N/A"` returned by Gemini JSON schemas no longer trigger false rejections.
+  - Updated text and photo food estimation prompts to explicitly treat drinks, milk, shakes, condiments, and supplements as valid consumable entries, and switched text estimates in `estimateEntry` and `/api/log` to `modelTier: "default"` (`gemini-4-hydrogen`).
+
 ## [0.2.6] - 2026-11-17
 
 ### Added

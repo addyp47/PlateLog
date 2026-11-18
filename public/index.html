@@ -541,7 +541,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.6</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.7</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -660,7 +660,7 @@ import "./adapter.js";
           },
         },
       },
-      error: { type: "STRING" },
+      error: { type: "STRING", nullable: true },
     },
   };
   const LABEL_SCHEMA = {
@@ -671,7 +671,7 @@ import "./adapter.js";
       kcal: { type: "NUMBER" },
       protein: { type: "NUMBER" },
       fiber: { type: "NUMBER" },
-      error: { type: "STRING" },
+      error: { type: "STRING", nullable: true },
     },
   };
   const TEXT_ESTIMATE_SCHEMA = {
@@ -682,8 +682,8 @@ import "./adapter.js";
       protein: { type: "NUMBER" },
       fiber: { type: "NUMBER" },
       assumptions: { type: "STRING" },
-      source: { type: "STRING" },
-      error: { type: "STRING" },
+      source: { type: "STRING", nullable: true },
+      error: { type: "STRING", nullable: true },
     },
   };
   const DISH_SCHEMA = {
@@ -694,7 +694,7 @@ import "./adapter.js";
       cups: { type: "NUMBER", nullable: true },
       reference: { type: "STRING" },
       confidence: { type: "STRING" },
-      error: { type: "STRING" },
+      error: { type: "STRING", nullable: true },
     },
   };
 
@@ -986,6 +986,11 @@ import "./adapter.js";
     } catch (e) { toast("Couldn't update My foods. Try again."); }
   }
 
+  function modelErr(r) {
+    const s = r && r.error != null ? String(r.error).trim() : "";
+    return !s || /^(none|null|n\/a|na|no|no error|false|ok|-)$/i.test(s) ? "" : s;
+  }
+
   // ---------- unified estimate (text OR photos + text) ----------
   let lookupBusy = false;
   async function estimateEntry() {
@@ -1003,13 +1008,13 @@ import "./adapter.js";
     st.textContent = rest ? "Checking restaurant nutrition…" : "Estimating…";
     const restBlock = rest ? `
 This was eaten at a restaurant or bought as takeout. If you recognize the chain (or the dish is a standard menu item of a named restaurant), use that restaurant's published nutrition values for the item and set "source":"chain". Otherwise estimate a typical restaurant portion (usually 1.5-2x a home portion) and then add about 20-25% to the calories for the oil, butter and sauce restaurants use that aren't visible; set "source":"estimate". Count sides, drinks and sauces that were mentioned.` : "";
-    const prompt = `Estimate the nutrition of this food entry from a food log: ${JSON.stringify(text)}
+    const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement) from a food log: ${JSON.stringify(text)}
 ${myFoodsContext(text)}${restBlock}
 Otherwise assume a common US brand and a typical single adult serving unless an amount or brand is given (e.g. "greek yogurt" = plain nonfat Greek yogurt such as Fage 0%, about 1 cup / 227 g). Use label values you know for named brands and restaurants. Include likely cooking oil or sauce for prepared dishes.
-Reply with JSON: name (short clear name including key amounts), kcal, protein (g), fiber (g), assumptions (under 15 words). If it isn't food, set error="not food".`;
+Reply with JSON: name (short clear name including key amounts), kcal, protein (g), fiber (g), assumptions (under 15 words), error (null unless non-edible/gibberish). Drinks, coffee, milk, and shakes count as food — only set error="not food" for gibberish or non-consumables.`;
     try {
-      const r = await sampleFn.json(prompt, { modelTier: rest ? "default" : "quick", responseSchema: TEXT_ESTIMATE_SCHEMA });
-      if (!r || r.error || isNaN(+r.kcal)) { st.textContent = "That doesn't look like a food. Try rewording it."; return; }
+      const r = await sampleFn.json(prompt, { modelTier: "default", responseSchema: TEXT_ESTIMATE_SCHEMA });
+      if (!r || modelErr(r) || isNaN(+r.kcal)) { st.textContent = "That doesn't look like a food. Try rewording it."; return; }
       $("fName").value = String(r.name || text).slice(0, 90);
       $("fKcal").value = Math.round(+r.kcal); $("fProt").value = Math.round(+r.protein || 0); $("fFib").value = Math.round(+r.fiber || 0);
       const src = !rest ? "" : r.source === "chain" ? "Using the restaurant's published numbers. " : "Restaurant estimate (+~20–25% for hidden oil/butter). ";
@@ -1469,11 +1474,11 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
     if (!file || !sampleFn) return;
     $("dishNote").textContent = "Measuring…";
     const prompt = `The photo shows a plate or bowl next to a reference object of known size (US dollar bill 6.14 x 2.61 in, US letter paper 8.5 x 11 in, dinner fork ~7.5 in, 12 oz can 4.83 x 2.6 in).
-Identify the reference object, then estimate the dish's diameter across the top, rim to rim, in inches. Reply with JSON. If no reference object is visible, set error="no reference".`;
+Identify the reference object, then estimate the dish's diameter across the top, rim to rim, in inches. Reply with JSON. Leave error null unless no reference object is visible (in that case set error="no reference").`;
     try {
       const r = await sampleFn.json(prompt, { images: [file], modelTier: "default", responseSchema: DISH_SCHEMA });
       const dia = r1(+(r && r.diameter_in));
-      if (!r || r.error || !(dia > 2 && dia < 20)) { $("dishNote").textContent = "Couldn't find a dollar bill or sheet of paper for scale."; return; }
+      if (!r || modelErr(r) || !(dia > 2 && dia < 20)) { $("dishNote").textContent = "Couldn't find a dollar bill or sheet of paper for scale."; return; }
       const name = String(r.dish || "Dish").slice(0, 40) + (+r.cups > 0 ? ` (holds ~${r1(+r.cups)} cups)` : "");
       settings.dishes = settings.dishes || []; settings.dishes.push({ n: name, in: dia }); renderDishes();
       saveDishes(`Added ${name}: ${dia} in across.`);
@@ -1953,10 +1958,10 @@ Reply with JSON: {"fraction":0.25,"note":"about a quarter left"}.`;
     const labelMode = $("modeLabel").checked;
     const servings = Math.max(0.25, parseFloat($("snapServ").value) || 1);
     const prompt = labelMode ? `The photo shows a packaged food's Nutrition Facts label.${note ? " Their note: " + JSON.stringify(note) + "." : ""}
-Read the per-serving column exactly (kcal, protein g, fiber g, serving string, product name). If unreadable, set error="no label".` : `${snapFiles.length > 1 ? `These ${snapFiles.length} photos show ONE meal from different angles.` : "The photo shows a meal."} Estimate its nutrition for the whole visible portion.${$("fRest").checked ? " Restaurant/takeout: match chain nutrition if known, else assume restaurant portions + oil/butter." : ""}${dishContext()}
+Read the per-serving column exactly (kcal, protein g, fiber g, serving string, product name). Leave error null unless unreadable (if unreadable, set error="no label").` : `${snapFiles.length > 1 ? `These ${snapFiles.length} photos show ONE meal from different angles.` : "The photo shows a meal or drink."} Estimate its nutrition for the whole visible portion.${$("fRest").checked ? " Restaurant/takeout: match chain nutrition if known, else assume restaurant portions + oil/butter." : ""}${dishContext()}
 ${note ? `User note: ${JSON.stringify(note)}. Treat amounts given (g, oz, cups, tbsp, etc.) as locked=true.` : ""}
 Include cooking oil/butter/sauce as its own item when likely.${myFoodsContext(note)}${perGramContext()}
-If no food is visible, set error="no food".`;
+Leave error null unless no food or drink is visible (if none visible, set error="no food").`;
     try {
       const r = await sampleFn.json(prompt, {
         images: snapFiles.slice(0, maxImgs),
@@ -1964,7 +1969,7 @@ If no food is visible, set error="no food".`;
         responseSchema: labelMode ? LABEL_SCHEMA : MEAL_SCHEMA,
       });
       if (labelMode) {
-        if (!r || r.error || isNaN(+r.kcal)) { $("snapStatus").textContent = "Couldn't read Nutrition Facts label. Try closer with less glare."; return; }
+        if (!r || modelErr(r) || isNaN(+r.kcal)) { $("snapStatus").textContent = "Couldn't read Nutrition Facts label. Try closer with less glare."; return; }
         const nm = String(r.name || "Packaged food").slice(0, 70);
         $("fName").value = servings === 1 ? nm : `${nm} ×${servings}`;
         $("fKcal").value = Math.round(+r.kcal * servings);
@@ -1981,7 +1986,7 @@ If no food is visible, set error="no food".`;
         if (mf && mf.u === "g" && x.g0 > 0) { const k = x.g0 / 100; x.kcal = (+mf.kcal || 0) * k; x.p = (+mf.p || 0) * k; x.f = (+mf.f || 0) * k; x.mine = true; }
         return x;
       });
-      if (!r || r.error || !items.length) { $("snapStatus").textContent = "Couldn't spot a meal in that photo. Try another angle."; return; }
+      if (!r || modelErr(r) || !items.length) { $("snapStatus").textContent = "Couldn't spot a meal in that photo. Try another angle."; return; }
       let q = null;
       if (r.question && Array.isArray(r.question.options)) {
         const idx = Math.round(+r.question.item_index);

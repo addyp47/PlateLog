@@ -22,7 +22,7 @@ const QUICK_LOG_SCHEMA = {
     protein: { type: "NUMBER" },
     fiber: { type: "NUMBER" },
     assumptions: { type: "STRING" },
-    error: { type: "STRING" },
+    error: { type: "STRING", nullable: true },
   },
 };
 
@@ -118,17 +118,17 @@ async function estimateAndLog(service: ReturnType<typeof createClient>, userId: 
     ? ` Known dishes for scale: ${dishes.map((d: { n: string; in: number }) => `${d.n} (${d.in} in)`).join(", ")}.`
     : "";
 
-  const prompt = `Estimate the nutrition of this food log entry.${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal shown in the photo."}${myFoodsBlock}${dishBlock}${
+  const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement).${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal or drink shown in the photo."}${myFoodsBlock}${dishBlock}${
     rest ? " Restaurant/takeout meal: match chain nutrition if known, otherwise assume restaurant portions with extra oil/butter." : ""
   }
 Third macro is FIBER (g), not fat. Assume common US brands and typical single adult portions when amounts aren't specified.
-Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber": number, "assumptions": short string}. If not food, set "error":"not food".`;
+Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber": number, "assumptions": short string, "error": null}. Drinks, coffee, milk, and shakes count as food — only set "error":"not food" for gibberish or non-consumables.`;
 
   const images = imageData ? [{ media_type: imageMediaType, data: imageData }] : [];
   const imgResult = buildImageParts(images);
   if ("error" in imgResult) throw new HttpError(imgResult.status, imgResult.error);
 
-  const model = resolveModel(images.length || rest ? "default" : "quick");
+  const model = resolveModel("default");
   const result = await generateWithRetry({
     apiKey,
     model,
@@ -140,8 +140,9 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "fiber
 
   if (!result.ok) throw new HttpError(502, result.error || "Gemini estimate failed");
   const parsed = parseJson(result.text) as Record<string, unknown> | null;
-  if (!parsed || parsed.error || !Number.isFinite(Number(parsed.kcal))) {
-    throw new HttpError(422, String(parsed?.error || "Could not estimate food"));
+  const parsedErr = modelErrorText(parsed?.error);
+  if (!parsed || parsedErr || !Number.isFinite(Number(parsed.kcal))) {
+    throw new HttpError(422, parsedErr || "Could not estimate food");
   }
 
   const food = foodFromBody({
@@ -405,6 +406,11 @@ function finite(value: unknown, fallback: number) {
 async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function modelErrorText(value: unknown) {
+  const s = value == null ? "" : String(value).trim();
+  return !s || /^(none|null|n\/a|na|no|no error|false|ok|-)$/i.test(s) ? "" : s;
 }
 
 function json(body: unknown, status = 200) {
