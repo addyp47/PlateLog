@@ -117,6 +117,9 @@ export function analyze(daysInput, today = todayStr()) {
   const last = tr[tr.length - 1] || null;
   const rate = rateLbWk();
   const outs = sortedDates().filter((s) => typeof days[s].energy_out === "number");
+  const stepAll = sortedDates().filter((s) => typeof days[s].steps === "number");
+  const step7Start = addDays(today, -6);
+  const step7 = stepAll.filter((s) => s >= step7Start && s <= today);
   return {
     units: "lb",
     trendWeight: last ? Math.round(last.t * 10) / 10 : null,
@@ -128,5 +131,8 @@ export function analyze(daysInput, today = todayStr()) {
     series: tr,
     energyOutAvg: outs.length ? Math.round(avg(outs.map((s) => days[s].energy_out))) : null,
     energyOutDays: outs.length,
+    stepsAvg7: step7.length ? Math.round(avg(step7.map((s) => days[s].steps))) : null,
+    stepsAvg: stepAll.length ? Math.round(avg(stepAll.map((s) => days[s].steps))) : null,
+    stepsDays: stepAll.length,
   };
 }

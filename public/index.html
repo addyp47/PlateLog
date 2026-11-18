@@ -302,9 +302,10 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card">
-      <h2>Morning weigh-in</h2>
+      <h2>Morning weigh-in &amp; steps</h2>
       <div class="weigh">
         <label class="field">Scale weight (lb)<input id="weightInput" type="number" inputmode="decimal" step="0.1" min="50" max="500" placeholder="—"></label>
+        <label class="field">Steps<input id="stepsInput" type="number" inputmode="numeric" step="100" min="0" max="200000" placeholder="—"></label>
         <div class="stat"><span class="v" id="trendNow">—</span><span class="k">Trend weight</span></div>
         <div class="stat"><span class="v" id="trendRate">—</span><span class="k">Per week (21 d)</span></div>
       </div>
@@ -415,6 +416,14 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
       <div class="grid2" id="nutriAvgs"></div>
     </div>
 
+    <div class="card" id="stepsCard" hidden>
+      <div class="row spread"><h2>Steps · last 28 days</h2>
+        <div class="legend"><span><i style="background:var(--plate-green)"></i>Steps</span><span><i style="background:var(--muted)"></i>8k ref</span></div>
+      </div>
+      <div class="chartreadout" id="stepsReadout">Tap a bar to inspect</div>
+      <div id="stepsChart"></div>
+    </div>
+
     <div class="card" hidden>
       <h2>Lifts</h2>
       <div class="tablewrap"><table id="liftTable"></table></div>
@@ -511,14 +520,17 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     <details class="card" id="apiCard">
       <summary><h2>External API &amp; iOS Shortcuts</h2></summary>
       <div class="cardbody">
-        <p class="small muted" style="margin:0">A personal key lets Apple Shortcuts or an agent log meals, weight, or read your daily summary. Shown once when created.</p>
+        <p class="small muted" style="margin:0">Web apps cannot read Apple Health directly in Safari, so an iOS Personal Automation Shortcut syncs Apple Health samples automatically using an API key below (shown once when created).</p>
         <div id="apiKeyList"></div>
         <div class="row"><button class="btn" id="apiKeyNew" type="button">Create API key</button><span class="small muted" id="apiKeyNote"></span></div>
         <div id="apiKeyFresh" hidden></div>
-        <p class="small muted" style="margin:4px 0 0"><b>Apple Shortcut (Dictate / Snap &amp; Log):</b> POST to <code>/functions/v1/api/log</code> with header <code>Authorization: Bearer pl_...</code>:</p>
+        <p class="small muted" style="margin:4px 0 0"><b>Base URL:</b> <code id="apiBaseUrl">https://&lt;project&gt;.supabase.co/functions/v1/api</code> <button class="linkbtn" type="button" id="copyApiUrlBtn">Copy</button></p>
+        <p class="small muted" style="margin:4px 0 0"><b>Apple Health Steps Automation</b> (Find Health Samples → Steps for Today → Sum → Get Contents of URL <code>POST /steps</code> with <code>Authorization: Bearer pl_...</code>):</p>
+        <code class="blk">{"steps": 9420}</code>
+        <p class="small muted" style="margin:4px 0 0"><b>Combined Apple Health Sync</b> (<code>POST /health</code> — single day or <code>entries</code> array; omit any field you aren't sending):</p>
+        <code class="blk">{"steps": 9420, "weight": 172.4, "energy_out": 2450}</code>
+        <p class="small muted" style="margin:4px 0 0"><b>Dictate / Snap Meal</b> (<code>POST /log</code>):</p>
         <code class="blk">{"text": "200g chicken breast and 1 cup white rice"}</code>
-        <p class="small muted" style="margin:4px 0 0"><b>Apple Health Weight Automation:</b> POST to <code>/functions/v1/api/weight</code>:</p>
-        <code class="blk">{"weight": 172.4}</code>
       </div>
     </details>
 
@@ -529,7 +541,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </div>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.5</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.2.6</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -823,6 +835,8 @@ import "./adapter.js";
     const d = day(curDate);
     const wi = $("weightInput");
     if (document.activeElement !== wi) wi.value = typeof d.weight === "number" ? d.weight : "";
+    const si = $("stepsInput");
+    if (document.activeElement !== si) si.value = typeof d.steps === "number" ? d.steps : "";
     const tr = trendSeries(); const last = tr[tr.length - 1];
     $("trendNow").textContent = last ? r1(last.t).toFixed(1) + " lb" : "—";
     const r = rateLbWk();
@@ -1265,6 +1279,35 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
     svg.addEventListener("pointerdown", e => showBar(e.clientX));
     svg.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "mouse") showBar(e.clientX); });
   }
+  function stepsChart(el, readoutEl) {
+    const W = 640, H = 200, L = 46, R = 12, T = 12, B = 26, n = 28, ref = 8000;
+    const end = todayStr(); const vals = [];
+    for (let i = n - 1; i >= 0; i--) { const s = addDays(end, -i); vals.push({ s, v: typeof day(s).steps === "number" ? day(s).steps : null }); }
+    const hasSteps = vals.some(v => v.v != null);
+    $("stepsCard").hidden = !hasSteps;
+    if (!hasSteps) { el.innerHTML = ""; if (readoutEl) readoutEl.textContent = ""; return; }
+    const ticks = niceTicks(0, Math.max(ref, ...vals.map(v => v.v || 0)) * 1.05); const hi = ticks[ticks.length - 1];
+    const Y = v => T + (hi - v) / hi * (H - T - B); const bw = (W - L - R) / n;
+    let g = "";
+    ticks.forEach(v => { g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v >= 1000 ? (v / 1000) + "k" : v}</text>`; });
+    vals.forEach((d, i) => {
+      if (d.v != null && d.v > 0) g += `<rect data-bi="${i}" x="${L + i * bw + 2}" y="${Y(d.v)}" width="${bw - 4}" height="${Y(0) - Y(d.v)}" rx="2" fill="var(--plate-green)" fill-opacity="${d.v >= ref ? 1 : 0.55}"/>`;
+      else g += `<rect data-bi="${i}" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+    });
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+    g += `<text x="${L}" y="${H - 6}">${fmtDate(vals[0].s, { month: "short", day: "numeric" })}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtDate(end, { month: "short", day: "numeric" })}</text>`;
+    el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+    const svg = el.querySelector("svg");
+    const showBar = (clientX) => {
+      const rect = svg.getBoundingClientRect();
+      const svgX = (clientX - rect.left) / rect.width * W;
+      const idx = Math.max(0, Math.min(n - 1, Math.floor((svgX - L) / bw)));
+      const d = vals[idx];
+      if (readoutEl) readoutEl.textContent = `${fmtDate(d.s, { month: "short", day: "numeric" })} · ${d.v == null ? "no steps" : Math.round(d.v).toLocaleString() + " steps"}`;
+    };
+    svg.addEventListener("pointerdown", e => showBar(e.clientX));
+    svg.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "mouse") showBar(e.clientX); });
+  }
 
   // ---------- render: progress ----------
   function buildTips() {
@@ -1364,9 +1407,15 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
     ];
     const outs = sortedDates().filter(s => typeof days[s].energy_out === "number");
     const outAvg = outs.length ? Math.round(avg(outs.map(s => days[s].energy_out))) : null;
+    const stepDays = sortedDates().filter(s => typeof days[s].steps === "number");
+    const step7Start = addDays(todayStr(), -6);
+    const step7 = stepDays.filter(s => s >= step7Start && s <= todayStr());
+    const stepAvg7 = step7.length ? Math.round(avg(step7.map(s => days[s].steps))) : null;
     $("nutriAvgs").innerHTML = avgs.map(a => `<div class="stat"><span class="v" style="color:${a.c}">${a.v ?? "—"}</span><span class="k">${a.k} 7-day avg · target ${a.t} ${a.u}</span></div>`).join("") +
       `<div class="stat"><span class="v">${w28.length}/28</span><span class="k">Days with food logged</span></div>` +
+      (stepAvg7 == null ? "" : `<div class="stat" id="stepsAvgStat"><span class="v" style="color:var(--plate-green)">${stepAvg7.toLocaleString()}</span><span class="k">Steps 7-day avg · ${stepDays.length} d</span></div>`) +
       (outAvg == null ? "" : `<div class="stat" id="energyOut"><span class="v">${outAvg}</span><span class="k">Energy out · ${outs.length} day${outs.length === 1 ? "" : "s"}</span></div>`);
+    stepsChart($("stepsChart"), $("stepsReadout"));
 
     renderCheckins();
     renderCoachHistory();
@@ -1569,6 +1618,11 @@ Identify the reference object, then estimate the dish's diameter across the top,
     const v = parseFloat(e.target.value); const d = ensureDay(curDate);
     if (isNaN(v)) delete d.weight; else if (v < 50 || v > 500) { toast("That weight looks off; enter pounds."); return; } else d.weight = r1(v);
     saveDay(curDate); renderToday(); toast(isNaN(v) ? "Weigh-in removed" : "Weigh-in saved");
+  });
+  $("stepsInput").addEventListener("change", e => {
+    const raw = e.target.value.trim(); const v = raw === "" ? NaN : parseInt(raw, 10); const d = ensureDay(curDate);
+    if (isNaN(v)) delete d.steps; else if (v < 0 || v > 200000) { toast("That step count looks off."); return; } else d.steps = v;
+    saveDay(curDate); renderToday(); toast(isNaN(v) ? "Steps removed" : "Steps saved");
   });
 
   $("foodForm").addEventListener("submit", e => {
@@ -2005,18 +2059,26 @@ If no food is visible, set error="no food".`;
     for (let i = 27; i >= 0; i--) {
       const s = addDays(end, -i); const d = days[s]; if (!d) continue;
       const t = dayTotals(s);
-      out.push(`${s}: weight ${d.weight ?? "-"}; ${t.n ? `${Math.round(t.kcal)} kcal, ${Math.round(t.protein)}g protein, ${Math.round(t.fiber)}g fiber${d.complete ? " (complete)" : " (incomplete)"}` : "no food"}`);
+      const stepNote = typeof d.steps === "number" ? `; ${Math.round(d.steps)} steps` : "";
+      out.push(`${s}: weight ${d.weight ?? "-"}${stepNote}; ${t.n ? `${Math.round(t.kcal)} kcal, ${Math.round(t.protein)}g protein, ${Math.round(t.fiber)}g fiber${d.complete ? " (complete)" : " (incomplete)"}` : "no food"}`);
     }
     const ci = checkins.filter(c => c.waist).map(c => `${c.date}: waist ${c.waist} in`).join("; ");
     if (ci) out.push("Monthly waist check-ins: " + ci);
     return out.join("\n");
   }
   async function renderApiKeys() {
-    const api = window.platelog; const box = $("apiKeyList"); if (!api || !box || !api.listKeys) return;
+    const api = window.platelog;
+    const urlEl = $("apiBaseUrl");
+    if (urlEl && api?.getApiBaseUrl) urlEl.textContent = api.getApiBaseUrl();
+    const box = $("apiKeyList"); if (!api || !box || !api.listKeys) return;
     let keys = [];
     try { keys = await api.listKeys(); } catch (e) { return; }
     box.innerHTML = keys.length ? keys.map(k => `<div class="row spread" style="padding:6px 0;border-top:1px solid var(--line)"><span class="num">${esc(k.prefix)}…</span><button class="btn ghost sm" type="button" data-rmkey="${esc(k.id)}">Revoke</button></div>`).join("") : `<p class="small muted" style="margin:8px 0 0">No keys yet.</p>`;
   }
+  $("copyApiUrlBtn").onclick = async () => {
+    const text = $("apiBaseUrl")?.textContent || "";
+    try { await navigator.clipboard.writeText(text); toast("Copied API URL"); } catch { toast("Copy failed—select the URL manually."); }
+  };
   $("apiKeyList").addEventListener("click", async e => {
     const b = e.target.closest("[data-rmkey]"); if (!b || !window.platelog) return;
     try { await window.platelog.revokeKey(b.dataset.rmkey); renderApiKeys(); } catch (err) { $("apiKeyNote").textContent = "Couldn't revoke that key."; }

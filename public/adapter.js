@@ -895,6 +895,10 @@ export function getUserEmail() {
   return session?.user?.email || "";
 }
 
+export function getApiBaseUrl() {
+  return `${PLATELOG_CONFIG.supabaseUrl.replace(/\/$/, "")}/functions/v1/api`;
+}
+
 let resolveAuth;
 export const authReady = new Promise((resolve) => { resolveAuth = resolve; });
 
@@ -941,6 +945,7 @@ const api = {
   revokeKey,
   signOut,
   getUserEmail,
+  getApiBaseUrl,
   onSyncStatus,
   loadAllDays,
   importBackup,

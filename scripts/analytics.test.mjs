@@ -67,3 +67,15 @@ test("export shape is one object keyed by collection", () => {
   const { counts } = countExport(root);
   assert.deepEqual(counts, { settings: 1, days: 1, foods: 1, combos: 1, checkins: 0 });
 });
+
+test("analyze aggregates 7-day and overall daily steps", () => {
+  const days = {
+    "2026-11-01": { ...day(175, 2200), steps: 6000 },
+    "2026-11-10": { ...day(174, 2200), steps: 8000 },
+    "2026-11-12": { ...day(173.8, 2200), steps: 10000 },
+  };
+  const summary = analyze(days, "2026-11-12");
+  assert.equal(summary.stepsAvg7, 9000);
+  assert.equal(summary.stepsAvg, 8000);
+  assert.equal(summary.stepsDays, 3);
+});

@@ -2,6 +2,13 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.2.6] - 2026-11-17
+
+### Added
+- **Apple Health Steps & Activity Sync (`supabase/functions/api/index.ts`, `shared/analytics.js`, `public/index.html`):**
+  - Added `POST /functions/v1/api/steps` and `POST /functions/v1/api/health` (supports single-day or batch `entries`, optional `weight` and `energy_out`, plus comma-formatted numbers and ISO timestamps from Apple Shortcuts).
+  - Added a **Steps** input next to Scale weight on the **Today** tab, a 7-day average + 28-day **Steps** bar chart on **Progress**, step context in **Coach Check-in** prompts, and copyable **Apple Health Steps & Weight Automation** setup in **Targets → External API & iOS Shortcuts**.
+
 ## [0.2.5] - 2026-11-17
 
 ### Added

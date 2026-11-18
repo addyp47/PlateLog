@@ -49,6 +49,8 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && path === "/entries") return json(await addEntry(service, userId, await req.json()));
     if (req.method === "POST" && path === "/log") return json(await estimateAndLog(service, userId, await req.json()));
     if (req.method === "POST" && path === "/weight") return json(await setWeight(service, userId, await req.json()));
+    if (req.method === "POST" && path === "/steps") return json(await setSteps(service, userId, await req.json()));
+    if (req.method === "POST" && path === "/health") return json(await syncHealth(service, userId, await req.json()));
     if (req.method === "POST" && path === "/complete") return json(await setComplete(service, userId, await req.json()));
     if (req.method === "GET" && path === "/days") return json(await readDays(service, userId, url));
     if (req.method === "GET" && path === "/foods") return json(await readFoods(service, userId));
@@ -175,6 +177,77 @@ async function setWeight(service: ReturnType<typeof createClient>, userId: strin
   const patch: Record<string, unknown> = { weight: Math.round(weight * 10) / 10 };
   if (body.energy_out === null) patch.energy_out = null;
   else if (body.energy_out != null && body.energy_out !== "") patch.energy_out = finite(body.energy_out, NaN);
+  if (body.steps === null) patch.steps = null;
+  else if (body.steps != null && body.steps !== "") {
+    const steps = finite(body.steps, NaN);
+    if (!Number.isFinite(steps) || steps < 0 || steps > 200000) throw new HttpError(400, "steps must be between 0 and 200000");
+    patch.steps = Math.round(steps);
+  }
+  return { ok: true, day: await patchDayFields(service, userId, date, patch) };
+}
+
+async function setSteps(service: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const date = assertDate(body.date || todayStr());
+  const patch: Record<string, unknown> = {};
+  if (body.steps === null) {
+    patch.steps = null;
+  } else {
+    const rawSteps = body.steps ?? body.count ?? body.value;
+    const steps = finite(rawSteps, NaN);
+    if (!Number.isFinite(steps) || steps < 0 || steps > 200000) throw new HttpError(400, "steps must be between 0 and 200000");
+    patch.steps = Math.round(steps);
+  }
+  if (body.energy_out === null) patch.energy_out = null;
+  else if (body.energy_out != null && body.energy_out !== "") {
+    const eout = finite(body.energy_out, NaN);
+    if (!Number.isFinite(eout) || eout < 0 || eout > 20000) throw new HttpError(400, "energy_out must be a non-negative number");
+    patch.energy_out = Math.round(eout);
+  }
+  return { ok: true, day: await patchDayFields(service, userId, date, patch) };
+}
+
+function healthPatchFromEntry(entry: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {};
+  if (entry.steps === null) patch.steps = null;
+  else if (entry.steps != null && entry.steps !== "") {
+    const steps = finite(entry.steps, NaN);
+    if (!Number.isFinite(steps) || steps < 0 || steps > 200000) throw new HttpError(400, "steps must be between 0 and 200000");
+    patch.steps = Math.round(steps);
+  }
+  if (entry.weight === null) patch.weight = null;
+  else if (entry.weight != null && entry.weight !== "") {
+    const weight = finite(entry.weight, NaN);
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 700) throw new HttpError(400, "weight must be a positive number");
+    patch.weight = Math.round(weight * 10) / 10;
+  }
+  const rawOut = entry.energy_out ?? entry.active_kcal;
+  if (rawOut === null) patch.energy_out = null;
+  else if (rawOut != null && rawOut !== "") {
+    const eout = finite(rawOut, NaN);
+    if (!Number.isFinite(eout) || eout < 0 || eout > 20000) throw new HttpError(400, "energy_out must be a non-negative number");
+    patch.energy_out = Math.round(eout);
+  }
+  return patch;
+}
+
+async function syncHealth(service: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  if (Array.isArray(body.entries)) {
+    const list = body.entries.slice(0, 90);
+    if (!list.length) throw new HttpError(400, "entries must not be empty");
+    const updated: Record<string, unknown>[] = [];
+    for (const item of list) {
+      const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const date = assertDate(entry.date || todayStr());
+      const patch = healthPatchFromEntry(entry);
+      if (!Object.keys(patch).length) continue;
+      updated.push(await patchDayFields(service, userId, date, patch));
+    }
+    if (!updated.length) throw new HttpError(400, "Provide at least one of steps, weight, or energy_out");
+    return { ok: true, count: updated.length, days: updated };
+  }
+  const date = assertDate(body.date || todayStr());
+  const patch = healthPatchFromEntry(body);
+  if (!Object.keys(patch).length) throw new HttpError(400, "Provide at least one of steps, weight, or energy_out");
   return { ok: true, day: await patchDayFields(service, userId, date, patch) };
 }
 
@@ -213,12 +286,14 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
   for (const row of dayRows || []) days[row.doc_id] = row.data || {};
   const stats = analyze(days, today);
   const targets = settingsRow?.data?.targets || null;
-  const todayStats = dayTotals(days[today] as Record<string, unknown> | undefined);
+  const todayDoc = days[today] as Record<string, unknown> | undefined;
+  const todayStats = dayTotals(todayDoc);
   return {
     today,
     units: "lb",
     targets,
     todayTotals: todayStats,
+    todaySteps: typeof todayDoc?.steps === "number" ? todayDoc.steps : null,
     trendWeight: stats.trendWeight,
     trendDate: stats.trendDate,
     scaleWeight: stats.scaleWeight,
@@ -227,6 +302,9 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
     maintenance: stats.maintenance,
     energyOutAvg: stats.energyOutAvg,
     energyOutDays: stats.energyOutDays,
+    stepsAvg7: stats.stepsAvg7,
+    stepsAvg: stats.stepsAvg,
+    stepsDays: stats.stepsDays,
   };
 }
 
@@ -308,13 +386,15 @@ async function saveDay(service: ReturnType<typeof createClient>, userId: string,
 }
 
 function assertDate(value: unknown) {
-  const date = String(value || "");
+  const raw = String(value || "").trim();
+  const date = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, "date must be YYYY-MM-DD");
   return date;
 }
 
 function finite(value: unknown, fallback: number) {
-  const n = typeof value === "number" ? value : Number(value);
+  const cleaned = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  const n = typeof cleaned === "number" ? cleaned : cleaned === "" ? NaN : Number(cleaned);
   if (!Number.isFinite(n)) {
     if (Number.isNaN(fallback)) throw new HttpError(400, "Expected a number");
     return fallback;
