@@ -1,4 +1,4 @@
-const CACHE_NAME = "platelog-shell-v0.3.0";
+const CACHE_NAME = "platelog-shell-v0.3.1";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

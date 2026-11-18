@@ -121,7 +121,7 @@ async function estimateAndLog(service: ReturnType<typeof createClient>, userId: 
     : "";
 
   const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement).${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal or drink shown in the photo."}${myFoodsBlock}${dishBlock}${
-    rest ? " Restaurant/takeout meal: match chain nutrition if known, otherwise assume restaurant portions with extra oil/butter." : ""
+    rest ? " Restaurant/takeout meal: if a restaurant or chain is named, use Google Search to look up its published nutrition info; otherwise assume restaurant portions with extra oil/butter." : ""
   }
 Include kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), and fiber (dietary fiber g). Assume common US brands and typical single adult portions when amounts aren't specified.
 Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "assumptions": short string, "error": null}. Drinks, coffee, milk, and shakes count as food — only set "error":"not food" for gibberish or non-consumables.`;
@@ -138,6 +138,7 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs
     parts: [...imgResult.parts, { text: prompt }],
     json: true,
     responseSchema: QUICK_LOG_SCHEMA,
+    webSearch: rest,
   });
 
   if (!result.ok) throw new HttpError(502, result.error || "Gemini estimate failed");
@@ -166,6 +167,7 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs
     date,
     added: food,
     assumptions: String(parsed.assumptions || ""),
+    ...(result.grounding ? { grounding: result.grounding } : {}),
     totals,
     remaining: {
       kcal: Math.round((targets.kcal || 0) - totals.kcal),

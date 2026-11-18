@@ -516,7 +516,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </details>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.3.0</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.3.1</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -968,6 +968,17 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     return !s || /^(none|null|n\/a|na|no|no error|false|ok|-)$/i.test(s) ? "" : s;
   }
 
+  function formatGroundingNote(grounding) {
+    if (!grounding) return "";
+    const names = (grounding.sources || []).map(s => {
+      if (s && s.title) return s.title;
+      try { return s && s.url ? new URL(s.url).hostname.replace(/^www\./, "") : ""; } catch { return ""; }
+    }).filter(Boolean);
+    if (names.length) return `Web: ${names.slice(0, 2).join(", ")}. `;
+    if (grounding.queries && grounding.queries.length) return "Checked via Google Search. ";
+    return "";
+  }
+
   // ---------- unified estimate (text OR photos + text) ----------
   let lookupBusy = false;
   async function estimateEntry() {
@@ -982,15 +993,20 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     const btn = $("fLookup"); btn.disabled = true;
     const st = $("lookupStatus"); st.hidden = false;
     const rest = $("fRest").checked;
-    st.textContent = rest ? "Checking restaurant nutrition…" : "Estimating…";
+    st.textContent = rest ? "Searching restaurant nutrition…" : "Estimating…";
     const restBlock = rest ? `
-This was eaten at a restaurant or bought as takeout. If you recognize the chain (or the dish is a standard menu item of a named restaurant), use that restaurant's published nutrition values for the item and set "source":"chain". Otherwise estimate a typical restaurant portion (usually 1.5-2x a home portion) and then add about 20-25% to the calories for the oil, butter and sauce restaurants use that aren't visible; set "source":"estimate". Count sides, drinks and sauces that were mentioned.` : "";
+This was eaten at a restaurant or bought as takeout. If you recognize the chain or named restaurant (or a named menu item), use Google Search to look up that restaurant's official or published nutrition values for the item and set "source":"chain". Otherwise estimate a typical restaurant portion (usually 1.5-2x a home portion) and then add about 20-25% to the calories for the oil, butter and sauce restaurants use that aren't visible; set "source":"estimate". Count sides, drinks and sauces that were mentioned.` : "";
     const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement) from a food log: ${JSON.stringify(text)}
 ${myFoodsContext(text)}${restBlock}
 Otherwise assume a common US brand and a typical single adult serving unless an amount or brand is given (e.g. "greek yogurt" = plain nonfat Greek yogurt such as Fage 0%, about 1 cup / 227 g). Use label values you know for named brands and restaurants. Include likely cooking oil or sauce for prepared dishes.
 Reply with JSON: name (short clear name including key amounts), kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), fiber (dietary fiber g), assumptions (under 15 words), error (null unless non-edible/gibberish). Drinks, coffee, milk, and shakes count as food — only set error="not food" for gibberish or non-consumables.`;
     try {
-      const r = await sampleFn.json(prompt, { modelTier: "default", responseSchema: TEXT_ESTIMATE_SCHEMA });
+      const { json: r, grounding } = await sampleFn.json(prompt, {
+        modelTier: "default",
+        responseSchema: TEXT_ESTIMATE_SCHEMA,
+        webSearch: rest,
+        withMeta: true,
+      });
       if (!r || modelErr(r) || isNaN(+r.kcal)) { st.textContent = "That doesn't look like a food. Try rewording it."; return; }
       $("fName").value = String(r.name || text).slice(0, 90);
       $("fKcal").value = Math.round(+r.kcal);
@@ -999,7 +1015,8 @@ Reply with JSON: name (short clear name including key amounts), kcal, protein (g
       $("fFat").value = r1(+r.fat || 0);
       $("fFib").value = r1(+r.fiber || 0);
       const src = !rest ? "" : r.source === "chain" ? "Using the restaurant's published numbers. " : "Restaurant estimate (+~20–25% for hidden oil/butter). ";
-      st.textContent = `${src}Assumed: ${r.assumptions || "a typical serving"}. Adjust if needed, then press Add.`;
+      const via = rest ? formatGroundingNote(grounding) : "";
+      st.textContent = `${src}${via}Assumed: ${r.assumptions || "a typical serving"}. Adjust if needed, then press Add.`;
       renderChips();
     } catch (e) {
       st.textContent = friendlyAiError(e);
@@ -2110,21 +2127,26 @@ Reply with JSON: {"fraction":0.25,"note":"about a quarter left"}.`;
     if (!sampleFn || !snapFiles.length) return;
     lookupBusy = true;
     const btn = $("fLookup"); btn.disabled = true;
-    $("snapStatus").textContent = "Estimating photo…";
     const note = $("fName").value.trim();
     const labelMode = $("modeLabel").checked;
+    const rest = $("fRest").checked;
+    $("snapStatus").textContent = !labelMode && rest ? "Searching restaurant nutrition…" : "Estimating photo…";
     const servings = Math.max(0.25, parseFloat($("snapServ").value) || 1);
     const prompt = labelMode ? `The photo shows a packaged food's Nutrition Facts label.${note ? " Their note: " + JSON.stringify(note) + "." : ""}
-Read the per-serving column exactly (kcal, protein g, carbs total carbohydrate g, fat total fat g, fiber g, serving string, product name). Leave error null unless unreadable (if unreadable, set error="no label").` : `${snapFiles.length > 1 ? `These ${snapFiles.length} photos show ONE meal from different angles.` : "The photo shows a meal or drink."} Estimate its nutrition for the whole visible portion.${$("fRest").checked ? " Restaurant/takeout: match chain nutrition if known, else assume restaurant portions + oil/butter." : ""}${dishContext()}
+Read the per-serving column exactly (kcal, protein g, carbs total carbohydrate g, fat total fat g, fiber g, serving string, product name). Leave error null unless unreadable (if unreadable, set error="no label").` : `${snapFiles.length > 1 ? `These ${snapFiles.length} photos show ONE meal from different angles.` : "The photo shows a meal or drink."} Estimate its nutrition for the whole visible portion.${rest ? " Restaurant/takeout: if a restaurant or chain is named or recognizable, use Google Search to look up its published nutrition info; else assume restaurant portions + oil/butter." : ""}${dishContext()}
 ${note ? `User note: ${JSON.stringify(note)}. Treat amounts given (g, oz, cups, tbsp, etc.) as locked=true.` : ""}
 Include cooking oil/butter/sauce as its own item when likely.${myFoodsContext(note)}${perGramContext()}
 Leave error null unless no food or drink is visible (if none visible, set error="no food").`;
     try {
-      const r = await sampleFn.json(prompt, {
+      const res = await sampleFn.json(prompt, {
         images: snapFiles.slice(0, maxImgs),
         modelTier: "default",
         responseSchema: labelMode ? LABEL_SCHEMA : MEAL_SCHEMA,
+        webSearch: !labelMode && rest,
+        withMeta: !labelMode,
       });
+      const r = labelMode ? res : res && res.json;
+      const grounding = !labelMode && res ? res.grounding : null;
       if (labelMode) {
         if (!r || modelErr(r) || isNaN(+r.kcal)) { $("snapStatus").textContent = "Couldn't read Nutrition Facts label. Try closer with less glare."; return; }
         const nm = String(r.name || "Packaged food").slice(0, 70);
@@ -2172,7 +2194,8 @@ Leave error null unless no food or drink is visible (if none visible, set error=
       renderSnapQ(); renderSnapItems();
       const lo = Math.round(+r.kcal_low), hi = Math.round(+r.kcal_high);
       const range = lo > 0 && hi >= lo ? ` Range ${lo}–${hi} kcal.` : "";
-      $("snapStatus").textContent = `Confidence: ${r.confidence || "medium"}.${range}${r.unsure ? " Unsure: " + r.unsure + "." : ""} Fix grams if needed, then press Add.`;
+      const via = rest ? formatGroundingNote(grounding) : "";
+      $("snapStatus").textContent = `${via}Confidence: ${r.confidence || "medium"}.${range}${r.unsure ? " Unsure: " + r.unsure + "." : ""} Fix grams if needed, then press Add.`;
     } catch (e) {
       $("snapStatus").textContent = friendlyAiError(e);
     } finally { lookupBusy = false; btn.disabled = false; }

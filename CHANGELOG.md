@@ -2,6 +2,13 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.3.1] - 2026-11-17
+
+### Added
+- **Live Restaurant Nutrition Lookup via Google Search (`supabase/functions/_shared/gemini.ts`, `supabase/functions/sample/index.ts`, `supabase/functions/api/index.ts`, `public/adapter.js`, `public/index.html`):**
+  - Checking **Restaurant / takeout** on text or meal photo estimates (and passing `"restaurant": true` to `POST /functions/v1/api/log`) now enables Gemini Google Search grounding (`tools: [{ google_search: {} }]`) so Gemini looks up published restaurant and menu nutrition online rather than guessing from memory.
+  - Surfaces web source titles/search confirmation directly in the estimate status line and returns `grounding` metadata on `/api/log` and `sample` responses, with automatic fallback if a configured model rejects combined search + structured JSON.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added

@@ -7,6 +7,11 @@ export type GeminiImagePart = {
   data?: string;
 };
 
+export type GroundingInfo = {
+  queries?: string[];
+  sources?: Array<{ title: string; url: string }>;
+};
+
 export type GeminiResult = {
   ok: boolean;
   status: number;
@@ -14,6 +19,7 @@ export type GeminiResult = {
   code?: string;
   text: string;
   finishReason?: string;
+  grounding?: GroundingInfo;
 };
 
 export function resolveModel(modelTier?: string) {
@@ -63,6 +69,7 @@ export async function generateWithRetry(params: {
   responseSchema?: unknown;
   maxTokens?: number;
   thinkingLevel?: string;
+  webSearch?: boolean;
 }) {
   const maxOutputTokens = Math.min(Number(params.maxTokens) || 4096, 8192);
   const generationConfig: Record<string, unknown> = {
@@ -76,12 +83,19 @@ export async function generateWithRetry(params: {
       generationConfig.responseSchema = params.responseSchema;
     }
   }
-  const requestBody = {
+  const baseBody: Record<string, unknown> = {
     system_instruction: { parts: [{ text: params.system }] },
     contents: [{ role: "user", parts: params.parts }],
     generationConfig,
   };
+  const requestBody = params.webSearch
+    ? { ...baseBody, tools: [{ google_search: {} }] }
+    : baseBody;
   const first = await callGemini(params.apiKey, params.model, requestBody);
+  // If the configured model rejects google_search combined with structured JSON (HTTP 400), fall back gracefully.
+  if (!first.ok && params.webSearch && first.status === 400) {
+    return await callGemini(params.apiKey, params.model, baseBody);
+  }
   return !first.ok && retryable(first) ? await callGemini(params.apiKey, params.model, requestBody) : first;
 }
 
@@ -116,13 +130,30 @@ async function callGemini(apiKey: string, model: string, requestBody: unknown): 
     .join("\n")
     .trim();
 
+  const rawMeta = candidate.groundingMetadata || {};
+  const queries = Array.isArray(rawMeta.webSearchQueries)
+    ? rawMeta.webSearchQueries.map((q: unknown) => String(q || "").trim()).filter(Boolean).slice(0, 3)
+    : [];
+  const seenUrls = new Set<string>();
+  const sources: Array<{ title: string; url: string }> = [];
+  if (Array.isArray(rawMeta.groundingChunks)) {
+    for (const chunk of rawMeta.groundingChunks) {
+      const url = String(chunk?.web?.uri || "").trim();
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+      sources.push({ title: String(chunk?.web?.title || "").trim().slice(0, 80), url });
+      if (sources.length >= 3) break;
+    }
+  }
+  const grounding: GroundingInfo | undefined = queries.length || sources.length ? { queries, sources } : undefined;
+
   const blockReason = payload?.promptFeedback?.blockReason || "";
   const finishReason = candidate.finishReason || "";
   if (!text) {
     const reason = blockReason || finishReason || "empty response";
     return { ok: false, status: 502, error: `Model returned no text (${reason})`, code: "unknown", text: "", finishReason };
   }
-  return { ok: true, status: 200, text, finishReason };
+  return { ok: true, status: 200, text, finishReason, ...(grounding ? { grounding } : {}) };
 }
 
 function retryable(result: GeminiResult) {

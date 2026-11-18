@@ -660,6 +660,7 @@ async function callSample(prompt, opts, asJson) {
   if (opts.system) body.system = opts.system;
   if (opts.responseSchema) body.responseSchema = opts.responseSchema;
   if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+  if (opts.webSearch) body.webSearch = true;
 
   const { data, error } = await supabase.functions.invoke("sample", { body });
   if (error || data?.error) throw await sampleError(error, data);
@@ -669,12 +670,13 @@ async function callSample(prompt, opts, asJson) {
 async function sample(prompt, opts = {}) {
   const data = await callSample(prompt, opts, false);
   if (opts.onText && data.text) opts.onText({ text: data.text });
-  return { text: data.text || "" };
+  return { text: data.text || "", ...(data.grounding ? { grounding: data.grounding } : {}) };
 }
 
 sample.json = async function sampleJson(prompt, opts = {}) {
   const data = await callSample(prompt, opts, true);
   if (data.json == null) throw coded("invalid_json", "The estimate came back garbled.");
+  if (opts.withMeta) return { json: data.json, grounding: data.grounding || null };
   return data.json;
 };
 

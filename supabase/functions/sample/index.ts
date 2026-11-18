@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
     responseSchema?: unknown;
     max_tokens?: number;
     modelTier?: string;
+    webSearch?: boolean;
   };
   try {
     body = await req.json();
@@ -117,6 +118,7 @@ Deno.serve(async (req) => {
     json: !!body.json,
     responseSchema: body.responseSchema,
     maxTokens: body.max_tokens,
+    webSearch: !!body.webSearch,
   });
 
   if (!result.ok) {
@@ -135,9 +137,9 @@ Deno.serve(async (req) => {
       console.error("sample invalid_json", { finishReason: result.finishReason, textLen: result.text.length });
       return json({ error: "Model did not return JSON", code: "invalid_json", text: result.text }, 502, cors);
     }
-    return json({ text: result.text, json: parsed }, 200, cors);
+    return json({ text: result.text, json: parsed, ...(result.grounding ? { grounding: result.grounding } : {}) }, 200, cors);
   }
-  return json({ text: result.text, json: null }, 200, cors);
+  return json({ text: result.text, json: null, ...(result.grounding ? { grounding: result.grounding } : {}) }, 200, cors);
 });
 
 function json(body: unknown, status = 200, cors: Record<string, string>) {
