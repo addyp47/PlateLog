@@ -2,6 +2,13 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.4.2] - 2026-11-18
+
+### Improved
+- **Barcode Servings Picker (`public/index.html`):**
+  - Scanning a barcode (both Open Food Facts lookups and previously saved barcodes) now opens an interactive **Servings** picker (`½`, `1`, `1½`, `2`, `3`, or any custom decimal) instead of auto-filling calories and assuming 1 serving.
+  - Macros update live as you pick or type servings, and products with both per-serving and per-100 g nutrition include a one-tap **Servings / Grams** toggle if you weigh the portion on a scale.
+
 ## [0.4.1] - 2026-11-18
 
 ### Fixed
