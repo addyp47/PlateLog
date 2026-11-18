@@ -293,7 +293,7 @@ async function handleWebhookNotification(
 
   const startNum = Number(params.get("startdate"));
   const endNum = Number(params.get("enddate"));
-  const startdate = Number.isFinite(startNum) && startNum > 0 ? startNum - 86400 : undefined;
+  const startdate = Number.isFinite(startNum) && startNum > 0 ? startNum - 172800 : undefined;
   const enddate = Number.isFinite(endNum) && endNum > 0 ? endNum + 86400 : undefined;
 
   try {
@@ -439,9 +439,9 @@ function parseMeasureGroups(groups: Array<Record<string, unknown>>, timezone: st
     if (weight == null && bodyFat == null) continue;
     const prev = byDate[dateStr] || { ts: 0 };
     byDate[dateStr] = {
-      weight: weight ?? prev.weight,
-      body_fat: bodyFat ?? prev.body_fat,
-      ts: Math.max(prev.ts, sec),
+      weight: prev.weight ?? weight,
+      body_fat: prev.body_fat ?? bodyFat,
+      ts: prev.ts || sec,
     };
   }
   return byDate;
