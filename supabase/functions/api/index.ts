@@ -24,8 +24,8 @@ const QUICK_LOG_SCHEMA = {
     fat: { type: "NUMBER" },
     fiber: { type: "NUMBER" },
     assumptions: { type: "STRING" },
-    error: { type: "STRING", nullable: true },
   },
+  required: ["name", "kcal", "protein", "carbs", "fat", "fiber", "assumptions"],
 };
 
 Deno.serve(async (req) => {
@@ -120,11 +120,12 @@ async function estimateAndLog(service: ReturnType<typeof createClient>, userId: 
     ? ` Known dishes for scale: ${dishes.map((d: { n: string; in: number }) => `${d.n} (${d.in} in)`).join(", ")}.`
     : "";
 
-  const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement).${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal or drink shown in the photo."}${myFoodsBlock}${dishBlock}${
+  const prompt = `Estimate the nutrition of this food log entry.${text ? ` Entry: ${JSON.stringify(text)}.` : " Estimate the meal or drink shown in the photo."}${myFoodsBlock}${dishBlock}${
     rest ? " Restaurant/takeout meal: if a restaurant or chain is named, use Google Search to look up its published nutrition info; otherwise assume restaurant portions with extra oil/butter." : ""
   }
-Include kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), and fiber (dietary fiber g). Assume common US brands and typical single adult portions when amounts aren't specified.
-Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "assumptions": short string, "error": null}. Drinks, coffee, milk, and shakes count as food — only set "error":"not food" for gibberish or non-consumables.`;
+Always treat the input as a consumable food, drink, recipe, ingredient, condiment, or supplement and return your best nutrition estimate — never refuse an entry.
+Use exact weights/amounts if given. Include kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), and fiber (dietary fiber g). Assume common US brands and typical single adult portions when amounts aren't specified.
+Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "assumptions": short string}.`;
 
   const images = imageData ? [{ media_type: imageMediaType, data: imageData }] : [];
   const imgResult = buildImageParts(images);
@@ -143,18 +144,18 @@ Reply with JSON: {"name": short label, "kcal": number, "protein": number, "carbs
 
   if (!result.ok) throw new HttpError(502, result.error || "Gemini estimate failed");
   const parsed = parseJson(result.text) as Record<string, unknown> | null;
-  const parsedErr = modelErrorText(parsed?.error);
-  if (!parsed || parsedErr || !Number.isFinite(Number(parsed.kcal))) {
-    throw new HttpError(422, parsedErr || "Could not estimate food");
+  const parsedKcal = parsed ? parseLooseNumber(parsed.kcal ?? parsed.calories) : NaN;
+  if (!parsed || !Number.isFinite(parsedKcal) || parsedKcal < 0) {
+    throw new HttpError(422, "Could not parse nutrition numbers from estimate");
   }
 
   const food = foodFromBody({
     name: String(parsed.name || text || "Logged meal").slice(0, 90),
-    kcal: Math.round(Number(parsed.kcal)),
-    protein: Math.round((Number(parsed.protein) || 0) * 10) / 10,
-    carbs: Math.round((Number(parsed.carbs) || 0) * 10) / 10,
-    fat: Math.round((Number(parsed.fat) || 0) * 10) / 10,
-    fiber: Math.round((Number(parsed.fiber) || 0) * 10) / 10,
+    kcal: Math.round(parsedKcal),
+    protein: Math.round(Math.max(0, parseLooseNumber(parsed.protein) || 0) * 10) / 10,
+    carbs: Math.round(Math.max(0, parseLooseNumber(parsed.carbs) || 0) * 10) / 10,
+    fat: Math.round(Math.max(0, parseLooseNumber(parsed.fat) || 0) * 10) / 10,
+    fiber: Math.round(Math.max(0, parseLooseNumber(parsed.fiber) || 0) * 10) / 10,
     rest,
   });
 
@@ -445,9 +446,11 @@ async function sha256Hex(text: string) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function modelErrorText(value: unknown) {
-  const s = value == null ? "" : String(value).trim();
-  return !s || /^(none|null|n\/a|na|no|no error|false|ok|-)$/i.test(s) ? "" : s;
+function parseLooseNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : NaN;
+  if (value == null) return NaN;
+  const m = String(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : NaN;
 }
 
 function json(body: unknown, status = 200) {

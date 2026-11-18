@@ -547,7 +547,7 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
     </details>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.4.0</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.4.1</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">
@@ -708,8 +708,8 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
       fiber: { type: "NUMBER" },
       assumptions: { type: "STRING" },
       source: { type: "STRING", nullable: true },
-      error: { type: "STRING", nullable: true },
     },
+    required: ["name", "kcal", "protein", "carbs", "fat", "fiber", "assumptions"],
   };
   const DISH_SCHEMA = {
     type: "OBJECT",
@@ -1006,6 +1006,18 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     const s = r && r.error != null ? String(r.error).trim() : "";
     return !s || /^(none|null|n\/a|na|no|no error|false|ok|-)$/i.test(s) ? "" : s;
   }
+  function parseNum(v) {
+    if (typeof v === "number") return Number.isFinite(v) ? v : NaN;
+    if (v == null) return NaN;
+    const m = String(v).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return m ? parseFloat(m[0]) : NaN;
+  }
+  function unwrapSampleJson(res) {
+    if (res && typeof res === "object" && "json" in res && res.json && typeof res.json === "object") {
+      return { r: res.json, grounding: res.grounding || null };
+    }
+    return { r: res && typeof res === "object" ? res : null, grounding: null };
+  }
 
   function formatGroundingNote(grounding) {
     if (!grounding) return "";
@@ -1035,24 +1047,30 @@ import { addDays, analyze, dayNum, dayTotals as computeDayTotals, todayStr } fro
     st.textContent = rest ? "Searching restaurant nutrition…" : "Estimating…";
     const restBlock = rest ? `
 This was eaten at a restaurant or bought as takeout. If you recognize the chain or named restaurant (or a named menu item), use Google Search to look up that restaurant's official or published nutrition values for the item and set "source":"chain". Otherwise estimate a typical restaurant portion (usually 1.5-2x a home portion) and then add about 20-25% to the calories for the oil, butter and sauce restaurants use that aren't visible; set "source":"estimate". Count sides, drinks and sauces that were mentioned.` : "";
-    const prompt = `Estimate the nutrition of this consumable entry (food, drink, milk, shake, condiment, or supplement) from a food log: ${JSON.stringify(text)}
+    const prompt = `Estimate the nutrition of this food log entry: ${JSON.stringify(text)}
 ${myFoodsContext(text)}${restBlock}
-Otherwise assume a common US brand and a typical single adult serving unless an amount or brand is given (e.g. "greek yogurt" = plain nonfat Greek yogurt such as Fage 0%, about 1 cup / 227 g). Use label values you know for named brands and restaurants. Include likely cooking oil or sauce for prepared dishes.
-Reply with JSON: name (short clear name including key amounts), kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), fiber (dietary fiber g), assumptions (under 15 words), error (null unless non-edible/gibberish). Drinks, coffee, milk, and shakes count as food — only set error="not food" for gibberish or non-consumables.`;
+Always treat the input as a consumable food, drink, recipe, ingredient, condiment, or supplement and return your best nutrition estimate — never refuse an entry.
+Use exact weights/amounts if given (e.g. grams, oz, cups, pieces). Otherwise assume a common US brand and a typical single adult serving (e.g. "greek yogurt" = plain nonfat Greek yogurt such as Fage 0%, about 1 cup / 227 g). Use label values you know for named brands and restaurants. Include likely cooking oil or sauce for prepared dishes.
+Reply with JSON: name (short clear name including key amounts), kcal, protein (g), carbs (total carbohydrate g), fat (total fat g), fiber (dietary fiber g), assumptions (under 15 words).`;
     try {
-      const { json: r, grounding } = await sampleFn.json(prompt, {
+      const rawRes = await sampleFn.json(prompt, {
         modelTier: "default",
         responseSchema: TEXT_ESTIMATE_SCHEMA,
         webSearch: rest,
         withMeta: true,
       });
-      if (!r || modelErr(r) || isNaN(+r.kcal)) { st.textContent = "That doesn't look like a food. Try rewording it."; return; }
+      const { r, grounding } = unwrapSampleJson(rawRes);
+      const kcal = r ? parseNum(r.kcal ?? r.calories) : NaN;
+      if (!r || !Number.isFinite(kcal) || kcal < 0) {
+        st.textContent = "Couldn't read numbers from that estimate. Press Estimate to retry, or enter macros manually.";
+        return;
+      }
       $("fName").value = String(r.name || text).slice(0, 90);
-      $("fKcal").value = Math.round(+r.kcal);
-      $("fProt").value = r1(+r.protein || 0);
-      $("fCarb").value = r1(+r.carbs || 0);
-      $("fFat").value = r1(+r.fat || 0);
-      $("fFib").value = r1(+r.fiber || 0);
+      $("fKcal").value = Math.round(kcal);
+      $("fProt").value = r1(Math.max(0, parseNum(r.protein) || 0));
+      $("fCarb").value = r1(Math.max(0, parseNum(r.carbs) || 0));
+      $("fFat").value = r1(Math.max(0, parseNum(r.fat) || 0));
+      $("fFib").value = r1(Math.max(0, parseNum(r.fiber) || 0));
       const src = !rest ? "" : r.source === "chain" ? "Using the restaurant's published numbers. " : "Restaurant estimate (+~20–25% for hidden oil/butter). ";
       const via = rest ? formatGroundingNote(grounding) : "";
       st.textContent = `${src}${via}Assumed: ${r.assumptions || "a typical serving"}. Adjust if needed, then press Add.`;
@@ -2229,32 +2247,36 @@ Leave error null unless no food or drink is visible (if none visible, set error=
         webSearch: !labelMode && rest,
         withMeta: !labelMode,
       });
-      const r = labelMode ? res : res && res.json;
-      const grounding = !labelMode && res ? res.grounding : null;
+      const { r, grounding } = labelMode ? { r: res, grounding: null } : unwrapSampleJson(res);
       if (labelMode) {
-        if (!r || modelErr(r) || isNaN(+r.kcal)) { $("snapStatus").textContent = "Couldn't read Nutrition Facts label. Try closer with less glare."; return; }
+        const lKcal = r ? parseNum(r.kcal ?? r.calories) : NaN;
+        if (!r || !Number.isFinite(lKcal) || lKcal < 0) { $("snapStatus").textContent = "Couldn't read Nutrition Facts label. Try closer with less glare."; return; }
+        const lProt = Math.max(0, parseNum(r.protein) || 0);
+        const lCarb = Math.max(0, parseNum(r.carbs) || 0);
+        const lFat = Math.max(0, parseNum(r.fat) || 0);
+        const lFib = Math.max(0, parseNum(r.fiber) || 0);
         const nm = String(r.name || "Packaged food").slice(0, 70);
         $("fName").value = servings === 1 ? nm : `${nm} ×${servings}`;
-        $("fKcal").value = Math.round(+r.kcal * servings);
-        $("fProt").value = r1((+r.protein || 0) * servings);
-        $("fCarb").value = r1((+r.carbs || 0) * servings);
-        $("fFat").value = r1((+r.fat || 0) * servings);
-        $("fFib").value = r1((+r.fiber || 0) * servings);
+        $("fKcal").value = Math.round(lKcal * servings);
+        $("fProt").value = r1(lProt * servings);
+        $("fCarb").value = r1(lCarb * servings);
+        $("fFat").value = r1(lFat * servings);
+        $("fFib").value = r1(lFib * servings);
         pendingLabelSave = {
           n: nm,
-          kcal: Math.round(+r.kcal),
-          p: r1(+r.protein || 0),
-          c: r1(+r.carbs || 0),
-          fat: r1(+r.fat || 0),
-          f: r1(+r.fiber || 0),
+          kcal: Math.round(lKcal),
+          p: r1(lProt),
+          c: r1(lCarb),
+          fat: r1(lFat),
+          f: r1(lFib),
           note: r.serving ? "label serving: " + r.serving : "from label"
         };
-        $("snapStatus").textContent = `Label: ${Math.round(+r.kcal)} kcal, ${r1(+r.protein || 0)}p, ${r1(+r.carbs || 0)}c, ${r1(+r.fat || 0)}fat, ${r1(+r.fiber || 0)}fib per serving. Press Add.`;
+        $("snapStatus").textContent = `Label: ${Math.round(lKcal)} kcal, ${r1(lProt)}p, ${r1(lCarb)}c, ${r1(lFat)}fat, ${r1(lFib)}fib per serving. Press Add.`;
         return;
       }
-      const raw = r && Array.isArray(r.items) ? r.items.filter(it => it && !isNaN(+it.kcal)) : [];
+      const raw = r && Array.isArray(r.items) ? r.items.filter(it => it && Number.isFinite(parseNum(it.kcal ?? it.calories))) : [];
       const items = raw.map(it => {
-        const x = { item: String(it.item || "item").slice(0, 60), g0: +it.grams || 0, g: +it.grams || 0, kcal: +it.kcal || 0, p: +it.protein || 0, c: +it.carbs || 0, fat: +it.fat || 0, f: +it.fiber || 0, locked: !!it.locked, added: !!it.added, mine: false };
+        const x = { item: String(it.item || "item").slice(0, 60), g0: parseNum(it.grams) || 0, g: parseNum(it.grams) || 0, kcal: Math.max(0, parseNum(it.kcal ?? it.calories) || 0), p: Math.max(0, parseNum(it.protein) || 0), c: Math.max(0, parseNum(it.carbs) || 0), fat: Math.max(0, parseNum(it.fat) || 0), f: Math.max(0, parseNum(it.fiber) || 0), locked: !!it.locked, added: !!it.added, mine: false };
         const mf = it.myfood ? savedByName(it.myfood) : null;
         if (mf && mf.u === "g" && x.g0 > 0) {
           const k = x.g0 / 100;
@@ -2267,7 +2289,7 @@ Leave error null unless no food or drink is visible (if none visible, set error=
         }
         return x;
       });
-      if (!r || modelErr(r) || !items.length) { $("snapStatus").textContent = "Couldn't spot a meal in that photo. Try another angle."; return; }
+      if (!r || !items.length) { $("snapStatus").textContent = "Couldn't spot a meal in that photo. Try another angle."; return; }
       let q = null;
       if (r.question && Array.isArray(r.question.options)) {
         const idx = Math.round(+r.question.item_index);

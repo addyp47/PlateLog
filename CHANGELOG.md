@@ -2,6 +2,15 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.4.1] - 2026-11-18
+
+### Fixed
+- **Eliminated False "not a food" Rejections (`public/index.html`, `supabase/functions/api/index.ts`):**
+  - Removed the `error` gatekeeper field from `TEXT_ESTIMATE_SCHEMA` and `QUICK_LOG_SCHEMA` and added explicit `required` macro fields so Gemini always returns a best-effort nutrition estimate instead of refusing valid entries like `roasted potatoes (245g)`.
+  - Defensively unwrapped `{ json, grounding }` responses (preventing stale-cache mismatches from looking like non-food errors), parsed numeric strings safely (`parseNum` / `parseLooseNumber`), and ensured valid meal/label photo estimates are never discarded due to stray `error` text.
+- **Withings Morning Weigh-In Priority (`supabase/functions/withings/index.ts`):**
+  - Kept the first (earliest) weigh-in of the day when multiple scale measurements occur on the same date, and widened the webhook sync lookback window to 48 hours so later-day weigh-ins never overwrite a morning weigh-in.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added
