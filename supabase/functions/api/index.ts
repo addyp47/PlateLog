@@ -6,7 +6,7 @@ import {
   generateWithRetry,
   parseJson,
   resolveModel,
-} from "../_shared/gemini.js";
+} from "../_shared/gemini.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

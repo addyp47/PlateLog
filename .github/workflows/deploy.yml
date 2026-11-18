@@ -27,12 +27,13 @@ jobs:
       - name: Link and push DB migrations + Edge Functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF || 'hlwyezzodbfvtcomjeex' }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          supabase db push
-          supabase functions deploy sample --use-api
-          supabase functions deploy api --use-api
+          supabase db push --yes
+          supabase functions deploy sample --use-api --yes
+          supabase functions deploy api --use-api --yes
 
   deploy-cloudflare-pages:
     needs: test
