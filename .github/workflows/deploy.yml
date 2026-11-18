@@ -31,9 +31,9 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF || 'hlwyezzodbfvtcomjeex' }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          supabase db push --yes
-          supabase functions deploy sample --use-api --yes
-          supabase functions deploy api --use-api --yes
+          supabase db push --remote="$SUPABASE_PROJECT_REF" --yes
+          supabase functions deploy sample --use-api --remote="$SUPABASE_PROJECT_REF" --yes
+          supabase functions deploy api --use-api --remote="$SUPABASE_PROJECT_REF" --yes
 
   deploy-cloudflare-pages:
     needs: test
