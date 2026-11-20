@@ -561,13 +561,15 @@ code.blk { display: block; font-family: var(--mono); font-size: 12px; background
         <code class="blk">{"steps": 9420}</code>
         <p class="small muted" style="margin:4px 0 0"><b>Combined Apple Health Sync</b> (<code>POST /health</code> — Steps + Active Energy (<code>energy_out</code>) + Weight + Body Fat % (<code>body_fat</code>); supports single day or <code>entries</code> array):</p>
         <code class="blk">{"steps": 9420, "energy_out": 640, "weight": 172.4, "body_fat": 17.4}</code>
+        <p class="small muted" style="margin:4px 0 0"><b>SnapCalorie / Apple Health daily totals</b> (<code>POST /nutrition</code> — replaces that day's single <code>SnapCalorie (Apple Health)</code> food entry; leave other foods alone; also accepts a <code>days</code> array):</p>
+        <code class="blk">{"date": "2026-11-20", "kcal": 2100, "protein": 150, "carbs": 200, "fat": 70, "fiber": 25, "source": "SnapCalorie"}</code>
         <p class="small muted" style="margin:4px 0 0"><b>Dictate / Snap Meal</b> (<code>POST /log</code>):</p>
         <code class="blk">{"text": "200g chicken breast and 1 cup white rice"}</code>
       </div>
     </details>
 
     <div class="card" id="accountCard">
-      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.4.3</span></div>
+      <div class="row spread"><h2>Account &amp; App</h2><span class="small muted num">v0.4.4</span></div>
       <div class="grid2">
         <label class="field">Theme
           <select id="themeSelect">

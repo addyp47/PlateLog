@@ -2,6 +2,13 @@
 
 All notable changes to Plate Log are tracked in this file and via GitHub Releases (`v*` tags).
 
+## [0.4.4] - 2026-11-20
+
+### Added
+- **SnapCalorie / Apple Health Nutrition Sync (`supabase/functions/api/index.ts`, `supabase/migrations/20261120000000_upsert_day_food_by_name.sql`):**
+  - Added idempotent `POST /functions/v1/api/nutrition` so an iPhone Shortcut can send a day's Dietary Energy, protein, carbs, fat, and optional fiber totals from Apple Health (written by SnapCalorie).
+  - Replays replace that day's single `SnapCalorie (Apple Health)` food entry and leave manual entries untouched. Accepts a single day or a `days` / `entries` array (up to 366) for backfill, plus string numbers and common date formats.
+
 ## [0.4.3] - 2026-11-18
 
 ### Fixed

@@ -89,6 +89,12 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/api/weight" \
   -H "Content-Type: application/json" \
   -d '{"date":"2026-11-17","weight":172.4}'
 
+# Upsert a day's SnapCalorie / Apple Health totals (replaces that source's entry only)
+curl -s -X POST "$SUPABASE_URL/functions/v1/api/nutrition" \
+  -H "Authorization: Bearer $PLATELOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"date":"2026-11-20","kcal":2100,"protein":150,"carbs":200,"fat":70,"fiber":25,"source":"SnapCalorie"}'
+
 # Mark a day complete
 curl -s -X POST "$SUPABASE_URL/functions/v1/api/complete" \
   -H "Authorization: Bearer $PLATELOG_API_KEY" \

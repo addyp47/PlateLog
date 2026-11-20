@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && path === "/weight") return json(await setWeight(service, userId, await req.json()));
     if (req.method === "POST" && path === "/steps") return json(await setSteps(service, userId, await req.json()));
     if (req.method === "POST" && path === "/health") return json(await syncHealth(service, userId, await req.json()));
+    if (req.method === "POST" && path === "/nutrition") return json(await upsertNutrition(service, userId, await req.json()));
     if (req.method === "POST" && path === "/complete") return json(await setComplete(service, userId, await req.json()));
     if (req.method === "GET" && path === "/days") return json(await readDays(service, userId, url));
     if (req.method === "GET" && path === "/foods") return json(await readFoods(service, userId));
@@ -342,6 +343,134 @@ async function readSummary(service: ReturnType<typeof createClient>, userId: str
     stepsAvg: stats.stepsAvg,
     stepsDays: stats.stepsDays,
   };
+}
+
+const SNAPCALORIE_ENTRY_NAME = "SnapCalorie (Apple Health)";
+const USER_TZ = "America/New_York";
+
+function todayInZone(timeZone = USER_TZ) {
+  return ymdInZone(new Date(), timeZone);
+}
+
+function ymdInZone(date: Date, timeZone = USER_TZ) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  if (!year || !month || !day) throw new HttpError(400, "date must be YYYY-MM-DD");
+  return `${year}-${month}-${day}`;
+}
+
+function parseFlexibleDate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return todayInZone();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // ISO datetime: convert to the user's calendar date, not the UTC prefix.
+  if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(raw)) {
+    const parsed = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+    if (!Number.isNaN(parsed.getTime())) return ymdInZone(parsed);
+  }
+  const us = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (us) {
+    const month = Number(us[1]);
+    const day = Number(us[2]);
+    const year = Number(us[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return ymdInZone(parsed);
+  throw new HttpError(400, "date must be YYYY-MM-DD");
+}
+
+function nutritionEntryName(source: string) {
+  if (!source || /^snapcalorie$/i.test(source)) return SNAPCALORIE_ENTRY_NAME;
+  return `${source} (Apple Health)`;
+}
+
+function nutritionFromBody(body: Record<string, unknown>) {
+  const date = parseFlexibleDate(body.date ?? body.day ?? todayInZone());
+  const source = String(body.source || "SnapCalorie").trim() || "SnapCalorie";
+  const name = nutritionEntryName(source);
+  const kcal = finite(body.kcal ?? body.calories ?? body.energy, 0);
+  if (kcal < 0 || kcal > 20000) throw new HttpError(400, "kcal must be between 0 and 20000");
+  const protein = finite(body.protein ?? body.p, 0);
+  const carbs = finite(body.carbs ?? body.c ?? body.carbohydrates, 0);
+  const fat = finite(body.fat ?? body.total_fat, 0);
+  const fiberRaw = body.fiber ?? body.f;
+  const fiber = fiberRaw == null || fiberRaw === "" ? 0 : finite(fiberRaw, 0);
+  for (const [label, value] of [["protein", protein], ["carbs", carbs], ["fat", fat], ["fiber", fiber]] as const) {
+    if (value < 0 || value > 2000) throw new HttpError(400, `${label} must be between 0 and 2000`);
+  }
+  const food: Record<string, unknown> = {
+    n: name,
+    kcal: Math.round(kcal),
+    p: Math.round(Math.max(0, protein) * 10) / 10,
+    c: Math.round(Math.max(0, carbs) * 10) / 10,
+    fat: Math.round(Math.max(0, fat) * 10) / 10,
+    f: Math.round(Math.max(0, fiber) * 10) / 10,
+    src: source.toLowerCase(),
+  };
+  return { date, food, name };
+}
+
+async function replaceDayFood(
+  service: ReturnType<typeof createClient>,
+  userId: string,
+  date: string,
+  food: Record<string, unknown>,
+  name: string,
+) {
+  const { data, error } = await service.rpc("upsert_day_food_by_name", {
+    p_date: date,
+    p_food: food,
+    p_user_id: userId,
+    p_name: name,
+  });
+  if (!error && data) return data as Record<string, unknown>;
+  const day = await loadDay(service, userId, date);
+  const src = typeof food.src === "string" && food.src ? food.src : null;
+  const foods = (Array.isArray(day.foods) ? day.foods : []).filter((item: Record<string, unknown>) => {
+    if (item && item.n === name) return false;
+    if (src && item && item.src === src) return false;
+    return true;
+  });
+  foods.push(food);
+  return await saveDay(service, userId, date, { ...day, foods });
+}
+
+async function upsertNutrition(service: ReturnType<typeof createClient>, userId: string, body: unknown) {
+  const list = Array.isArray(body)
+    ? body
+    : body && typeof body === "object" && Array.isArray((body as Record<string, unknown>).days)
+    ? (body as Record<string, unknown>).days as unknown[]
+    : body && typeof body === "object" && Array.isArray((body as Record<string, unknown>).entries)
+    ? (body as Record<string, unknown>).entries as unknown[]
+    : null;
+
+  if (list) {
+    const batch = list.slice(0, 366);
+    if (!batch.length) throw new HttpError(400, "days must not be empty");
+    const results: { date: string; food: Record<string, unknown>; day: Record<string, unknown> }[] = [];
+    for (const item of batch) {
+      const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const { date, food, name } = nutritionFromBody(entry);
+      const day = await replaceDayFood(service, userId, date, food, name);
+      results.push({ date, food, day });
+    }
+    return { ok: true, count: results.length, results };
+  }
+
+  if (!body || typeof body !== "object") throw new HttpError(400, "Expected a JSON object");
+  const { date, food, name } = nutritionFromBody(body as Record<string, unknown>);
+  const day = await replaceDayFood(service, userId, date, food, name);
+  return { ok: true, date, food, day };
 }
 
 function foodFromBody(body: Record<string, unknown>) {
